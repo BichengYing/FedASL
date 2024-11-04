@@ -41,6 +41,7 @@ if __name__ == "__main__":
     parser.add_argument("--iterations", type=int, default=1000, help="Number of iterations")
     parser.add_argument("--num-clients", type=int, default=4)
     parser.add_argument("--num_sample_clients", type=int, default=2)
+    parser.add_argument("--local_update", type=int, default=1)
     parser.add_argument("--dataset", type=str, default="mnist", help="[mnist, fashion, cifar10]")
     parser.add_argument("--seed", type=int, default=1234, help="random seed")
     parser.add_argument("--dtype", type=str, default="float32", help="random seed")
@@ -65,7 +66,7 @@ if __name__ == "__main__":
         server_criterion=torch.nn.CrossEntropyLoss(),
         server_accuracy_func=util.accuracy,
         num_sample_clients=args.num_sample_clients,
-        local_update_steps=1,
+        local_update_steps=args.local_update,
     )
 
     with tqdm(total=args.iterations, desc="Training:") as t:

@@ -50,21 +50,25 @@ class FedASLClient:
         return batch_inputs, labels
 
     def local_update(self, local_update_steps: int) -> tuple[float, float]:
-        assert local_update_steps == 1
-
         train_loss = util.Metric("Client train loss")
         train_accuracy = util.Metric("Client train accuracy")
+        self.y = 0
+        for k in range(local_update_steps):
+            if k > 0:
+                # self.y is 0 when k==0. This can save the computation.
+                util.set_flatten_model_back(
+                    self.model,
+                    util.get_flatten_model_param(self.model) - self.lr * self.y,
+                )
+            util.set_all_grad_zero(self.model)
+            batch_inputs, labels = self.get_next_input_labels()
+            pred = self.model(batch_inputs)
+            loss = self.criterion(pred, labels)
+            loss.backward()
 
-        util.set_all_grad_zero(self.model)
-
-        batch_inputs, labels = self.get_next_input_labels()
-        pred = self.model(batch_inputs)
-        loss = self.criterion(pred, labels)
-        loss.backward()
-
-        self.grad_curr = util.get_flatten_model_grad(self.model)
-        self.y = self.grad_curr - self.grad_prev
-        self.grad_prev = self.grad_curr
+            self.grad_curr = util.get_flatten_model_grad(self.model)
+            self.y = self.y + self.grad_curr - self.grad_prev
+            self.grad_prev = self.grad_curr
 
         train_loss.update(loss.detach().item())
         train_accuracy.update(self.accuracy_func(pred, labels).detach().item())
