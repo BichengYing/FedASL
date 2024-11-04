@@ -1,0 +1,19 @@
+{
+    "editor.rulers": [
+        100
+    ],
+    "editor.detectIndentation": false,
+    "[python]": {
+        "editor.formatOnPaste": false,
+        "editor.formatOnType": false,
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "charliermarsh.ruff",
+    },
+    "ruff.enable": true,
+    "ruff.interpreter": [
+        "/Users/ybc/miniconda3/envs/decomfl/bin/python"
+    ],
+    "ruff.path": [
+        "/Users/ybc/miniconda3/envs/decomfl/bin/ruff"
+    ],
+}
