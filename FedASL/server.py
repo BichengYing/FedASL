@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import random
 from typing import Any, Callable, Iterable, Sequence
 
+import numpy as np
 import torch
 
 import FedASL.util as util
@@ -35,9 +35,10 @@ class FedASLServer:
 
         self.y = 0
 
-    def get_sampled_client_index(self) -> list[int]:
+    def get_sampled_client_index(self, prob: Sequence[float]) -> list[int]:
+        assert len(self.clients) == len(prob)
         # TODO(ybc) make this function control from the outside
-        return random.sample(range(len(self.clients)), self.num_sample_clients)
+        return np.random.choice(self.clients, size=self.num_sample_clients, replace=False, p=prob)
 
     def set_learning_rate(self, lr: float) -> None:
         # Client
@@ -49,14 +50,12 @@ class FedASLServer:
             for p in self.optim.param_groups:
                 p["lr"] = lr
 
-    def train_one_step(self) -> tuple[float, float]:
-        sampled_client_indices: list[int] = self.get_sampled_client_index()
+    def train_one_step(self, sampling_prob: Sequence[float]) -> tuple[float, float]:
+        sampled_clients: list[int] = self.get_sampled_client_index(sampling_prob)
 
         step_train_loss = util.Metric("train_loss")
         step_train_accuracy = util.Metric("train_loss")
-        for index in sampled_client_indices:
-            client = self.clients[index]
-
+        for client in sampled_clients:
             client.pull_model(self.server_model)
             client_loss, client_accuracy = client.local_update(self.local_update_steps)
             self.y += client.push_grad().to(self.device)

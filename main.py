@@ -1,4 +1,5 @@
 import argparse
+import numpy as np
 import torch
 from tqdm import tqdm
 
@@ -70,8 +71,10 @@ if __name__ == "__main__":
     )
 
     with tqdm(total=args.iterations, desc="Training:") as t:
+        sampling_prob = np.random.rand(args.num_clients) + 0.1
+        sampling_prob /= sum(sampling_prob)
         for ite in range(args.iterations):
-            step_loss, step_accuracy = server.train_one_step()
+            step_loss, step_accuracy = server.train_one_step(sampling_prob)
             t.set_postfix({"Loss": step_loss, "Accuracy": step_accuracy})
             t.update(1)
 
