@@ -6,21 +6,26 @@ from tqdm import tqdm
 from FedASL import data_util
 from FedASL import model_util
 from FedASL import util
-from FedASL.client import FedASLClient
-from FedASL.server import FedASLServer
+from FedASL.client import FedASLClient, FedAvgClient, FedClientBase
+from FedASL.server import FedASLServer, FedAvgServer
+
+client_class_map = {"fedavg": FedAvgClient, "fedasl": FedASLClient}
+server_class_map = {"fedavg": FedAvgServer, "fedasl": FedASLServer}
 
 
 def setup_clients(
     num_clients: int,
     client_models: list[torch.nn.Module],
     train_loaders: list[torch.utils.data.DataLoader],
-) -> FedASLServer:
+    method: str,
+) -> list[FedClientBase]:
     assert len(train_loaders) == num_clients
     client_device = torch.device("mps")
-    clients = []
+    client_class = client_class_map.get(method.lower())
 
+    clients = []
     for i in range(args.num_clients):
-        client = FedASLClient(
+        client = client_class(
             client_models[i],
             train_loaders[i],
             criterion=torch.nn.CrossEntropyLoss(),
@@ -38,15 +43,18 @@ if __name__ == "__main__":
     parser.add_argument("--test-batch-size", type=int, default=1000)
     parser.add_argument("--lr", type=float, default=0.005, help="Learning rate")
     parser.add_argument("--iterations", type=int, default=1000, help="Number of iterations")
-    parser.add_argument("--num-clients", type=int, default=4)
+    parser.add_argument("--num-clients", type=int, default=8)
     parser.add_argument("--num_sample_clients", type=int, default=2)
-    parser.add_argument("--local_update", type=int, default=1)
+    parser.add_argument("--local_update", type=int, default=3)
     parser.add_argument("--dataset", type=str, default="mnist", help="[mnist, fashion, cifar10]")
     parser.add_argument("--seed", type=int, default=1234, help="random seed")
     parser.add_argument("--dtype", type=str, default="float32", help="random seed")
     parser.add_argument("--eval-iterations", type=int, default=25)
+    parser.add_argument("--method", type=str, default="fedasl", help="[fedasl, fedavg]")
 
     args = parser.parse_args()
+    if args.method.lower() not in client_class_map.keys():
+        raise ValueError(f"--method in args must be one of {list(client_class_map.keys())}")
 
     server_device, client_devices = data_util.auto_select_devices(args.num_clients)
     train_loaders, test_loader = data_util.prepare_dataloaders(
@@ -55,8 +63,9 @@ if __name__ == "__main__":
     client_models, server_model = model_util.prepare_models(
         args.dataset, args.num_clients, client_devices, server_device, args.dtype
     )
-    clients = setup_clients(args.num_clients, client_models, train_loaders)
-    server = FedASLServer(
+    clients = setup_clients(args.num_clients, client_models, train_loaders, args.method)
+    server_class = server_class_map.get(args.method.lower())
+    server = server_class(
         clients,
         server_device,
         server_model=server_model,
