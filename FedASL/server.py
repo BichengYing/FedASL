@@ -1,20 +1,19 @@
 from __future__ import annotations
-
+import abc
 from typing import Any, Callable, Iterable, Sequence
 
 import numpy as np
 import torch
 
 import FedASL.util as util
-from FedASL.client import FedASLClient
+from FedASL.client import FedClientBase, FedASLClient
 
 
-class FedASLServer:
+class FedServerBase:
     def __init__(
         self,
-        clients: Sequence[FedASLClient],
+        clients: Sequence[FedClientBase],
         device: torch.device,
-        lr: float,
         server_model: torch.nn.Module,
         server_criterion: Any,
         server_accuracy_func: Callable,
@@ -23,7 +22,6 @@ class FedASLServer:
     ) -> None:
         self.clients = clients
         self.device = device
-        self.lr = lr
         self.num_sample_clients = num_sample_clients
         self.local_update_steps = local_update_steps
 
@@ -33,42 +31,14 @@ class FedASLServer:
 
         self.dtype = next(server_model.parameters()).dtype
 
-        self.y = 0
-
     def get_sampled_client_index(self, prob: Sequence[float]) -> list[int]:
         assert len(self.clients) == len(prob)
         # TODO(ybc) make this function control from the outside
         return np.random.choice(self.clients, size=self.num_sample_clients, replace=False, p=prob)
 
-    def set_learning_rate(self, lr: float) -> None:
-        # Client
-        for client in self.clients:
-            for p in client.optimizer.param_groups:
-                p["lr"] = lr
-        # Server
-        if self.server_model:
-            for p in self.optim.param_groups:
-                p["lr"] = lr
-
+    @abc.abstractmethod
     def train_one_step(self, sampling_prob: Sequence[float]) -> tuple[float, float]:
-        sampled_clients: list[int] = self.get_sampled_client_index(sampling_prob)
-
-        step_train_loss = util.Metric("train_loss")
-        step_train_accuracy = util.Metric("train_loss")
-        for client in sampled_clients:
-            client.pull_model(self.server_model)
-            client_loss, client_accuracy = client.local_update(self.local_update_steps)
-            self.y += client.push_grad().to(self.device)
-
-            step_train_loss.update(client_loss)
-            step_train_accuracy.update(client_accuracy)
-
-        # Update the server model
-        util.set_flatten_model_back(
-            self.server_model, util.get_flatten_model_param(self.server_model) - self.lr * self.y
-        )
-
-        return step_train_loss.avg, step_train_accuracy.avg
+        """One step for the training"""
 
     def eval_model(self, test_loader: Iterable[Any], iteration: int) -> tuple[float, float]:
         self.server_model.eval()
@@ -87,3 +57,46 @@ class FedASLServer:
             f"Eval Loss:{eval_loss.avg:.4f}, " f"Accuracy:{eval_accuracy.avg * 100:.2f}%",
         )
         return eval_loss.avg, eval_accuracy.avg
+
+
+class FedASLServer(FedServerBase):
+    def __init__(
+        self,
+        clients: Sequence[FedASLClient],
+        device: torch.device,
+        server_model: torch.nn.Module,
+        server_criterion: Any,
+        server_accuracy_func: Callable,
+        num_sample_clients: int = 10,
+        local_update_steps: int = 10,
+    ) -> None:
+        self.y = 0
+        super().__init__(
+            clients=clients,
+            device=device,
+            server_model=server_model,
+            server_criterion=server_criterion,
+            server_accuracy_func=server_accuracy_func,
+            num_sample_clients=num_sample_clients,
+            local_update_steps=local_update_steps,
+        )
+
+    def train_one_step(self, lr: float, sampling_prob: Sequence[float]) -> tuple[float, float]:
+        sampled_clients: list[int] = self.get_sampled_client_index(sampling_prob)
+
+        step_train_loss = util.Metric("train_loss")
+        step_train_accuracy = util.Metric("train_loss")
+        for client in sampled_clients:
+            client.pull_model(self.server_model)
+            client_loss, client_accuracy = client.local_update(lr, self.local_update_steps)
+            self.y += client.push_step().to(self.device)
+
+            step_train_loss.update(client_loss)
+            step_train_accuracy.update(client_accuracy)
+
+        # Update the server model
+        util.set_flatten_model_back(
+            self.server_model, util.get_flatten_model_param(self.server_model) - lr * self.y
+        )
+
+        return step_train_loss.avg, step_train_accuracy.avg

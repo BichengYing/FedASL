@@ -1,3 +1,4 @@
+import abc
 from typing import Any, Iterator, Callable
 
 import torch
@@ -6,12 +7,11 @@ from torch.utils.data import DataLoader
 import FedASL.util as util
 
 
-class FedASLClient:
+class FedClientBase:
     def __init__(
         self,
         model: torch.nn.Module,
         dataloader: DataLoader,
-        lr: float,
         criterion: Any,
         accuracy_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
         device: torch.device | str = "cpu",
@@ -21,16 +21,11 @@ class FedASLClient:
 
         self._device = device
 
-        self.lr = lr
         self.criterion = criterion
         self.accuracy_func = accuracy_func
 
         self.data_iterator = self._get_train_batch_iterator()
         self.dtype = next(model.parameters()).dtype
-
-        self.y = 0
-        self.grad_prev = 0
-        self.grad_curr = 0
 
     @property
     def device(self) -> torch.device:
@@ -49,7 +44,42 @@ class FedASLClient:
             labels = labels.to(self.device)
         return batch_inputs, labels
 
-    def local_update(self, local_update_steps: int) -> tuple[float, float]:
+    @abc.abstractmethod
+    def local_update(self, lr: float, local_update_steps: int) -> tuple[float, float]:
+        """Local update steps at the client side"""
+
+    def pull_model(self, server_model: torch.nn.Module) -> None:
+        with torch.no_grad():
+            for p, updated_p in zip(self.model.parameters(), server_model.parameters()):
+                p.set_(updated_p.to(self._device))
+
+    @abc.abstractmethod
+    def push_step(self) -> torch.Tensor:
+        """The push step after the local update is done."""
+
+
+class FedASLClient(FedClientBase):
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        dataloader: DataLoader,
+        criterion: Any,
+        accuracy_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+        device: torch.device | str = "cpu",
+    ):
+        self.y = 0
+        self.grad_prev = 0
+        self.grad_curr = 0
+
+        super().__init__(
+            model=model,
+            dataloader=dataloader,
+            criterion=criterion,
+            accuracy_func=accuracy_func,
+            device=device,
+        )
+
+    def local_update(self, lr: float, local_update_steps: int) -> tuple[float, float]:
         train_loss = util.Metric("Client train loss")
         train_accuracy = util.Metric("Client train accuracy")
         self.y = 0
@@ -58,7 +88,7 @@ class FedASLClient:
                 # self.y is 0 when k==0. This can save the computation.
                 util.set_flatten_model_back(
                     self.model,
-                    util.get_flatten_model_param(self.model) - self.lr * self.y,
+                    util.get_flatten_model_param(self.model) - lr * self.y,
                 )
             util.set_all_grad_zero(self.model)
             batch_inputs, labels = self.get_next_input_labels()
@@ -75,10 +105,5 @@ class FedASLClient:
 
         return train_loss.avg, train_accuracy.avg
 
-    def pull_model(self, server_model: torch.nn.Module) -> None:
-        with torch.no_grad():
-            for p, updated_p in zip(self.model.parameters(), server_model.parameters()):
-                p.set_(updated_p.to(self._device))
-
-    def push_grad(self) -> torch.Tensor:
+    def push_step(self) -> torch.Tensor:
         return self.y

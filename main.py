@@ -14,7 +14,6 @@ def setup_clients(
     num_clients: int,
     client_models: list[torch.nn.Module],
     train_loaders: list[torch.utils.data.DataLoader],
-    lr: float,
 ) -> FedASLServer:
     assert len(train_loaders) == num_clients
     client_device = torch.device("mps")
@@ -24,7 +23,6 @@ def setup_clients(
         client = FedASLClient(
             client_models[i],
             train_loaders[i],
-            lr=lr,
             criterion=torch.nn.CrossEntropyLoss(),
             accuracy_func=util.accuracy,
             device=client_device,
@@ -50,19 +48,17 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    client_devices = [torch.device("mps") for _ in range(args.num_clients)]
-    server_device = torch.device("mps")
+    server_device, client_devices = data_util.auto_select_devices(args.num_clients)
     train_loaders, test_loader = data_util.prepare_dataloaders(
         args.dataset, args.num_clients, args.train_batch_size, args.test_batch_size, args.seed
     )
     client_models, server_model = model_util.prepare_models(
         args.dataset, args.num_clients, client_devices, server_device, args.dtype
     )
-    clients = setup_clients(args.num_clients, client_models, train_loaders, args.lr)
+    clients = setup_clients(args.num_clients, client_models, train_loaders)
     server = FedASLServer(
         clients,
         server_device,
-        lr=args.lr,
         server_model=server_model,
         server_criterion=torch.nn.CrossEntropyLoss(),
         server_accuracy_func=util.accuracy,
@@ -76,7 +72,7 @@ if __name__ == "__main__":
         sampling_prob /= sum(sampling_prob)
         print(f"{sampling_prob=}")
         for ite in range(args.iterations):
-            step_loss, step_accuracy = server.train_one_step(sampling_prob)
+            step_loss, step_accuracy = server.train_one_step(args.lr, sampling_prob)
             t.set_postfix({"Loss": step_loss, "Accuracy": step_accuracy})
             t.update(1)
 
