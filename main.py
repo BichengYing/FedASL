@@ -6,11 +6,19 @@ from tqdm import tqdm
 from FedASL import data_util
 from FedASL import model_util
 from FedASL import util
-from FedASL.client import FedASLClient, FedAvgClient, FedClientBase
-from FedASL.server import FedASLServer, FedAvgServer
+from FedASL.client import FedASLClient, FedAvgClient, FedClientBase, FedGaussianProjClient
+from FedASL.server import FedASLServer, FedAvgServer, FedGaussianProjServer
 
-client_class_map = {"fedavg": FedAvgClient, "fedasl": FedASLClient}
-server_class_map = {"fedavg": FedAvgServer, "fedasl": FedASLServer}
+client_class_map = {
+    "fedavg": FedAvgClient,
+    "fedasl": FedASLClient,
+    "fedgproj": FedGaussianProjClient,
+}
+server_class_map = {
+    "fedavg": FedAvgServer,
+    "fedasl": FedASLServer,
+    "fedgproj": FedGaussianProjServer,
+}
 
 
 def setup_clients(
@@ -50,7 +58,8 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=1234, help="random seed")
     parser.add_argument("--dtype", type=str, default="float32", help="random seed")
     parser.add_argument("--eval-iterations", type=int, default=25)
-    parser.add_argument("--method", type=str, default="fedasl", help="[fedasl, fedavg]")
+    parser.add_argument("--method", type=str, default="fedasl", help="[fedasl, fedavg, fedgproj]")
+    parser.add_argument("--num_pert", type=int, default=10)
 
     args = parser.parse_args()
     if args.method.lower() not in client_class_map.keys():
@@ -65,6 +74,9 @@ if __name__ == "__main__":
     )
     clients = setup_clients(args.num_clients, client_models, train_loaders, args.method)
     server_class = server_class_map.get(args.method.lower())
+    kwargs = {}
+    if args.method == "fedgproj":
+        kwargs["num_pert"] = args.num_pert
     server = server_class(
         clients,
         server_device,
@@ -73,11 +85,12 @@ if __name__ == "__main__":
         server_accuracy_func=util.accuracy,
         num_sample_clients=args.num_sample_clients,
         local_update_steps=args.local_update,
+        **kwargs,
     )
 
     with tqdm(total=args.iterations, desc="Training:") as t:
         np.random.seed(args.seed)
-        sampling_prob = np.random.rand(args.num_clients) + 0.1
+        sampling_prob = np.random.rand(args.num_clients) + 0.05
         sampling_prob /= sum(sampling_prob)
         print(f"{sampling_prob=}")
         for ite in range(args.iterations):

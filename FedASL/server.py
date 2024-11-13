@@ -143,3 +143,51 @@ class FedAvgServer(FedServerBase):
         util.set_flatten_model_back(self.server_model, avg_model)
 
         return step_train_loss.avg, step_train_accuracy.avg
+
+
+# Theoratical we just need seed to communicate between server and client. Here
+# we just use FedAvg for simplicity since it is equivalent.
+class FedGaussianProjServer(FedServerBase):
+    def __init__(
+        self,
+        clients: Sequence[FedAvgClient],
+        device: torch.device,
+        server_model: torch.nn.Module,
+        server_criterion: Any,
+        server_accuracy_func: Callable,
+        num_sample_clients: int = 10,
+        local_update_steps: int = 10,
+        num_pert: int = 10,
+    ) -> None:
+        self.num_pert = num_pert
+        super().__init__(
+            clients=clients,
+            device=device,
+            server_model=server_model,
+            server_criterion=server_criterion,
+            server_accuracy_func=server_accuracy_func,
+            num_sample_clients=num_sample_clients,
+            local_update_steps=local_update_steps,
+        )
+
+    def train_one_step(self, lr: float, sampling_prob: Sequence[float]) -> tuple[float, float]:
+        sampled_clients: list[int] = self.get_sampled_client_index(sampling_prob)
+
+        step_train_loss = util.Metric("train_loss")
+        step_train_accuracy = util.Metric("train_loss")
+        for client in sampled_clients:
+            seeds = np.random.randint(100000, size=self.num_pert)
+            client.pull_model(self.server_model)
+            client_loss, client_accuracy = client.local_update(lr, self.local_update_steps, seeds)
+
+            step_train_loss.update(client_loss)
+            step_train_accuracy.update(client_accuracy)
+
+        # Update the server model
+        avg_model = 0
+        for client in sampled_clients:
+            avg_model += client.push_step()
+        avg_model.div_(len(sampled_clients))
+        util.set_flatten_model_back(self.server_model, avg_model)
+
+        return step_train_loss.avg, step_train_accuracy.avg

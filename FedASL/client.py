@@ -149,3 +149,57 @@ class FedAvgClient(FedClientBase):
 
     def push_step(self) -> torch.Tensor:
         return util.get_flatten_model_param(self.model)
+
+
+class FedGaussianProjClient(FedClientBase):
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        dataloader: DataLoader,
+        criterion: Any,
+        accuracy_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+        device: torch.device | str = "cpu",
+    ):
+        super().__init__(
+            model=model,
+            dataloader=dataloader,
+            criterion=criterion,
+            accuracy_func=accuracy_func,
+            device=device,
+        )
+
+    def local_update(
+        self, lr: float, local_update_steps: int, seeds: list[int]
+    ) -> tuple[float, float]:
+        train_loss = util.Metric("Client train loss")
+        train_accuracy = util.Metric("Client train accuracy")
+        self.y = 0
+        for k in range(local_update_steps):
+            util.set_all_grad_zero(self.model)
+            batch_inputs, labels = self.get_next_input_labels()
+            pred = self.model(batch_inputs)
+            loss = self.criterion(pred, labels)
+            loss.backward()
+
+            with torch.no_grad():
+                grad_curr = util.get_flatten_model_grad(self.model)
+                grad_proj = 0
+                for seed in seeds:
+                    torch.manual_seed(seed)
+                    z = torch.randn_like(grad_curr)
+                    proj_g = grad_curr.inner(z)
+                    grad_proj += z.mul_(proj_g)
+                grad_proj.div_(len(seeds))
+
+                # manually update model
+                util.set_flatten_model_back(
+                    self.model, util.get_flatten_model_param(self.model) - lr * grad_proj
+                )
+
+        train_loss.update(loss.detach().item())
+        train_accuracy.update(self.accuracy_func(pred, labels).detach().item())
+
+        return train_loss.avg, train_accuracy.avg
+
+    def push_step(self) -> torch.Tensor:
+        return util.get_flatten_model_param(self.model)
