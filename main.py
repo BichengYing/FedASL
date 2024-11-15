@@ -6,18 +6,20 @@ from tqdm import tqdm
 from FedASL import data_util
 from FedASL import model_util
 from FedASL import util
-from FedASL.client import FedASLClient, FedAvgClient, FedClientBase, FedGaussianProjClient
-from FedASL.server import FedASLServer, FedAvgServer, FedGaussianProjServer
+from FedASL import client
+from FedASL import server
 
 client_class_map = {
-    "fedavg": FedAvgClient,
-    "fedasl": FedASLClient,
-    "fedgproj": FedGaussianProjClient,
+    "fedavg": client.FedAvgClient,
+    "fedasl": client.FedASLClient,
+    "fedgproj": client.FedGaussianProjClient,
+    "fedzo": client.FedZOClient,
 }
 server_class_map = {
-    "fedavg": FedAvgServer,
-    "fedasl": FedASLServer,
-    "fedgproj": FedGaussianProjServer,
+    "fedavg": server.FedAvgServer,
+    "fedasl": server.FedASLServer,
+    "fedgproj": server.FedGaussianProjServer,
+    "fedzo": server.FedZOServer,
 }
 
 
@@ -26,7 +28,7 @@ def setup_clients(
     client_models: list[torch.nn.Module],
     train_loaders: list[torch.utils.data.DataLoader],
     method: str,
-) -> list[FedClientBase]:
+) -> list[client.FedClientBase]:
     assert len(train_loaders) == num_clients
     client_device = torch.device("mps")
     client_class = client_class_map.get(method.lower())
@@ -58,8 +60,13 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=1234, help="random seed")
     parser.add_argument("--dtype", type=str, default="float32", help="random seed")
     parser.add_argument("--eval-iterations", type=int, default=25)
-    parser.add_argument("--method", type=str, default="fedasl", help="[fedasl, fedavg, fedgproj]")
+    parser.add_argument(
+        "--method", type=str, default="fedasl", help="[fedasl, fedavg, fedgproj, fedzo]"
+    )
+
+    # Per method specified args
     parser.add_argument("--num_pert", type=int, default=10)
+    parser.add_argument("--same_seed", type=int, default=1)
 
     args = parser.parse_args()
     if args.method.lower() not in client_class_map.keys():
@@ -77,6 +84,11 @@ if __name__ == "__main__":
     kwargs = {}
     if args.method == "fedgproj":
         kwargs["num_pert"] = args.num_pert
+    if args.method == "fedzo":
+        kwargs["num_pert"] = args.num_pert
+        kwargs["same_seed"] = bool(args.same_seed)
+    print(kwargs)
+
     server = server_class(
         clients,
         server_device,

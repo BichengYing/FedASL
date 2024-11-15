@@ -5,14 +5,13 @@ from typing import Any, Callable, Iterable, Sequence
 import numpy as np
 import torch
 
-import FedASL.util as util
-from FedASL.client import FedClientBase, FedASLClient, FedAvgClient
+from FedASL import util, client
 
 
 class FedServerBase:
     def __init__(
         self,
-        clients: Sequence[FedClientBase],
+        clients: Sequence[client.FedClientBase],
         device: torch.device,
         server_model: torch.nn.Module,
         server_criterion: Any,
@@ -62,7 +61,7 @@ class FedServerBase:
 class FedASLServer(FedServerBase):
     def __init__(
         self,
-        clients: Sequence[FedASLClient],
+        clients: Sequence[client.FedASLClient],
         device: torch.device,
         server_model: torch.nn.Module,
         server_criterion: Any,
@@ -105,7 +104,7 @@ class FedASLServer(FedServerBase):
 class FedAvgServer(FedServerBase):
     def __init__(
         self,
-        clients: Sequence[FedAvgClient],
+        clients: Sequence[client.FedAvgClient],
         device: torch.device,
         server_model: torch.nn.Module,
         server_criterion: Any,
@@ -150,7 +149,7 @@ class FedAvgServer(FedServerBase):
 class FedGaussianProjServer(FedServerBase):
     def __init__(
         self,
-        clients: Sequence[FedAvgClient],
+        clients: Sequence[client.FedGaussianProjClient],
         device: torch.device,
         server_model: torch.nn.Module,
         server_criterion: Any,
@@ -177,6 +176,56 @@ class FedGaussianProjServer(FedServerBase):
         step_train_accuracy = util.Metric("train_loss")
         for client in sampled_clients:
             seeds = np.random.randint(100000, size=self.num_pert)
+            client.pull_model(self.server_model)
+            client_loss, client_accuracy = client.local_update(lr, self.local_update_steps, seeds)
+
+            step_train_loss.update(client_loss)
+            step_train_accuracy.update(client_accuracy)
+
+        # Update the server model
+        avg_model = 0
+        for client in sampled_clients:
+            avg_model += client.push_step()
+        avg_model.div_(len(sampled_clients))
+        util.set_flatten_model_back(self.server_model, avg_model)
+
+        return step_train_loss.avg, step_train_accuracy.avg
+
+
+class FedZOServer(FedServerBase):
+    def __init__(
+        self,
+        clients: Sequence[client.FedZOClient],
+        device: torch.device,
+        server_model: torch.nn.Module,
+        server_criterion: Any,
+        server_accuracy_func: Callable,
+        num_sample_clients: int = 10,
+        local_update_steps: int = 10,
+        num_pert: int = 10,
+        same_seed: bool = True,
+    ) -> None:
+        self.num_pert = num_pert
+        self.same_seed = same_seed
+        super().__init__(
+            clients=clients,
+            device=device,
+            server_model=server_model,
+            server_criterion=server_criterion,
+            server_accuracy_func=server_accuracy_func,
+            num_sample_clients=num_sample_clients,
+            local_update_steps=local_update_steps,
+        )
+
+    def train_one_step(self, lr: float, sampling_prob: Sequence[float]) -> tuple[float, float]:
+        sampled_clients: list[int] = self.get_sampled_client_index(sampling_prob)
+
+        step_train_loss = util.Metric("train_loss")
+        step_train_accuracy = util.Metric("train_loss")
+        for i, client in enumerate(sampled_clients):
+            seeds = np.random.randint(100000, size=self.num_pert)
+            if not self.same_seed:
+                seeds += i
             client.pull_model(self.server_model)
             client_loss, client_accuracy = client.local_update(lr, self.local_update_steps, seeds)
 
