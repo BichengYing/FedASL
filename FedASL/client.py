@@ -45,7 +45,7 @@ class FedClientBase:
         return batch_inputs, labels
 
     @abc.abstractmethod
-    def local_update(self, lr: float, local_update_steps: int) -> tuple[float, float]:
+    def local_update(self, lr: float, local_update_steps: int, **kwargs) -> tuple[float, float]:
         """Local update steps at the client side"""
 
     def pull_model(self, server_model: torch.nn.Module) -> None:
@@ -266,3 +266,56 @@ class FedZOClient(FedClientBase):
 
     def push_step(self) -> torch.Tensor:
         return util.get_flatten_model_param(self.model)
+
+
+class ScaffoldClient(FedClientBase):
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        dataloader: DataLoader,
+        criterion: Any,
+        accuracy_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+        device: torch.device | str = "cpu",
+    ):
+        self.local_c = 0  # Local grad composition
+        self.delta_c = 0
+        super().__init__(
+            model=model,
+            dataloader=dataloader,
+            criterion=criterion,
+            accuracy_func=accuracy_func,
+            device=device,
+        )
+
+    def local_update(
+        self, lr: float, local_update_steps: int, global_c: torch.Tensor
+    ) -> tuple[float, float]:
+        train_loss = util.Metric("Client train loss")
+        train_accuracy = util.Metric("Client train accuracy")
+        init_model = util.get_flatten_model_param(self.model)
+        for k in range(local_update_steps):
+            util.set_all_grad_zero(self.model)
+            batch_inputs, labels = self.get_next_input_labels()
+            pred = self.model(batch_inputs)
+            loss = self.criterion(pred, labels)
+            loss.backward()
+
+            grad = util.get_flatten_model_grad(self.model)
+
+            # manually update model
+            util.set_flatten_model_back(
+                self.model,
+                util.get_flatten_model_param(self.model) - lr * (grad - self.local_c + global_c),
+            )
+
+        # We have to use option 2.
+        self.delta_model = util.get_flatten_model_param(self.model) - init_model
+        self.delta_c = -global_c - self.delta_model / (local_update_steps / lr)
+        self.local_c += self.delta_c
+
+        train_loss.update(loss.detach().item())
+        train_accuracy.update(self.accuracy_func(pred, labels).detach().item())
+        return train_loss.avg, train_accuracy.avg
+
+    def push_step(self) -> tuple[torch.Tensor, torch.Tensor]:
+        return self.delta_model, self.delta_c

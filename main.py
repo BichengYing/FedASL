@@ -6,20 +6,22 @@ from tqdm import tqdm
 from FedASL import data_util
 from FedASL import model_util
 from FedASL import util
-from FedASL import client
-from FedASL import server
+from FedASL import client as fl_client
+from FedASL import server as fl_server
 
 client_class_map = {
-    "fedavg": client.FedAvgClient,
-    "fedasl": client.FedASLClient,
-    "fedgproj": client.FedGaussianProjClient,
-    "fedzo": client.FedZOClient,
+    "fedavg": fl_client.FedAvgClient,
+    "fedasl": fl_client.FedASLClient,
+    "fedgproj": fl_client.FedGaussianProjClient,
+    "fedzo": fl_client.FedZOClient,
+    "scaffold": fl_client.ScaffoldClient,
 }
 server_class_map = {
-    "fedavg": server.FedAvgServer,
-    "fedasl": server.FedASLServer,
-    "fedgproj": server.FedGaussianProjServer,
-    "fedzo": server.FedZOServer,
+    "fedavg": fl_server.FedAvgServer,
+    "fedasl": fl_server.FedASLServer,
+    "fedgproj": fl_server.FedGaussianProjServer,
+    "fedzo": fl_server.FedZOServer,
+    "scaffold": fl_server.ScaffoldServer,
 }
 
 
@@ -28,7 +30,7 @@ def setup_clients(
     client_models: list[torch.nn.Module],
     train_loaders: list[torch.utils.data.DataLoader],
     method: str,
-) -> list[client.FedClientBase]:
+) -> list[fl_client.FedClientBase]:
     assert len(train_loaders) == num_clients
     client_device = torch.device("mps")
     client_class = client_class_map.get(method.lower())
@@ -59,6 +61,7 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", type=str, default="mnist", help="[mnist, fashion, cifar10]")
     parser.add_argument("--seed", type=int, default=1234, help="random seed")
     parser.add_argument("--dtype", type=str, default="float32", help="random seed")
+    parser.add_argument("--arb_client_sampling", action="store_true", default=False)
     parser.add_argument("--eval-iterations", type=int, default=25)
     parser.add_argument(
         "--method", type=str, default="fedasl", help="[fedasl, fedavg, fedgproj, fedzo]"
@@ -66,7 +69,7 @@ if __name__ == "__main__":
 
     # Per method specified args
     parser.add_argument("--num_pert", type=int, default=10)
-    parser.add_argument("--same_seed", type=int, default=1)
+    parser.add_argument("--same_seed", action="store_true", default=False)
 
     args = parser.parse_args()
     if args.method.lower() not in client_class_map.keys():
@@ -102,8 +105,11 @@ if __name__ == "__main__":
 
     with tqdm(total=args.iterations, desc="Training:") as t:
         np.random.seed(args.seed)
-        sampling_prob = np.random.rand(args.num_clients) + 0.05
-        sampling_prob /= sum(sampling_prob)
+        if args.arb_client_sampling:
+            sampling_prob = np.random.rand(args.num_clients) + 0.05
+            sampling_prob /= sum(sampling_prob)
+        else:
+            sampling_prob = np.ones(args.num_clients) / args.num_clients
         print(f"{sampling_prob=}")
         for ite in range(args.iterations):
             step_loss, step_accuracy = server.train_one_step(args.lr, sampling_prob)
