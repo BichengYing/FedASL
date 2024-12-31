@@ -285,8 +285,8 @@ class ScaffoldServer(FedServerBase):
         # Update the server model
         for client in sampled_clients:
             client_model, delta_c = client.push_step()
-            server_param.add_(client_model.mul_(self.global_step))
-            self.global_c += delta_c.mul_(self.num_sample_clients / len(self.clients))
+            server_param.add_(client_model.mul_(self.global_step / self.num_sample_clients))
+            self.global_c += delta_c.mul_(1 / len(self.clients))
 
         util.set_flatten_model_back(self.server_model, server_param)
 
