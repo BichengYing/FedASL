@@ -29,10 +29,10 @@ def setup_clients(
     num_clients: int,
     client_models: list[torch.nn.Module],
     train_loaders: list[torch.utils.data.DataLoader],
+    client_devices: list[torch.device],
     method: str,
 ) -> list[fl_client.FedClientBase]:
     assert len(train_loaders) == num_clients
-    client_device = torch.device("mps")
     client_class = client_class_map.get(method.lower())
 
     clients = []
@@ -42,7 +42,7 @@ def setup_clients(
             train_loaders[i],
             criterion=torch.nn.CrossEntropyLoss(),
             accuracy_func=util.accuracy,
-            device=client_device,
+            device=client_devices[i],
         )
         clients.append(client)
 
@@ -52,19 +52,19 @@ def setup_clients(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="FedASL trainning")
     parser.add_argument("--train-batch-size", type=int, default=128)
-    parser.add_argument("--test-batch-size", type=int, default=1000)
-    parser.add_argument("--lr", type=float, default=0.005, help="Learning rate")
+    parser.add_argument("--test-batch-size", type=int, default=256)
+    parser.add_argument("--lr", type=float, default=0.0005, help="Learning rate")
     parser.add_argument("--iterations", type=int, default=1000, help="Number of iterations")
-    parser.add_argument("--num-clients", type=int, default=8)
-    parser.add_argument("--num_sample_clients", type=int, default=2)
-    parser.add_argument("--local_update", type=int, default=3)
+    parser.add_argument("--num-clients", type=int, default=16)
+    parser.add_argument("--num_sample_clients", type=int, default=4)
+    parser.add_argument("--local_update", type=int, default=4)
     parser.add_argument("--dataset", type=str, default="mnist", help="[mnist, fashion, cifar10]")
-    parser.add_argument("--seed", type=int, default=1234, help="random seed")
+    parser.add_argument("--seed", type=int, default=99, help="random seed")
     parser.add_argument("--dtype", type=str, default="float32", help="random seed")
     parser.add_argument("--arb_client_sampling", action="store_true", default=False)
-    parser.add_argument("--eval-iterations", type=int, default=25)
+    parser.add_argument("--eval-iterations", type=int, default=10)
     parser.add_argument(
-        "--method", type=str, default="fedasl", help="[fedasl, fedavg, fedgproj, fedzo]"
+        "--method", type=str, default="fedgproj", help="[fedasl, fedavg, fedgproj, fedzo, scaffold]"
     )
 
     # Per method specified args
@@ -82,7 +82,9 @@ if __name__ == "__main__":
     client_models, server_model = model_util.prepare_models(
         args.dataset, args.num_clients, client_devices, server_device, args.dtype
     )
-    clients = setup_clients(args.num_clients, client_models, train_loaders, args.method)
+    clients = setup_clients(
+        args.num_clients, client_models, train_loaders, client_devices, args.method
+    )
     server_class = server_class_map.get(args.method.lower())
     kwargs = {}
     if args.method == "fedgproj":

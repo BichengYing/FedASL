@@ -11,7 +11,7 @@ def auto_select_devices(
     if not no_cuda and torch.cuda.is_available():
         num_devices = torch.cuda.device_count()
         return torch.device("cuda:0"), [
-            torch.device(f"cuda:{i +1 % num_devices}") for i in range(num_clients)
+            torch.device(f"cuda:{(i+1) % num_devices}") for i in range(num_clients)
         ]
 
     if not no_mps and torch.backends.mps.is_available():

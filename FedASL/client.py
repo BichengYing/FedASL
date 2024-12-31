@@ -80,6 +80,7 @@ class FedASLClient(FedClientBase):
         )
 
     def local_update(self, lr: float, local_update_steps: int) -> tuple[float, float]:
+        self.model.train()
         train_loss = util.Metric("Client train loss")
         train_accuracy = util.Metric("Client train accuracy")
         self.y = 0
@@ -127,9 +128,9 @@ class FedAvgClient(FedClientBase):
         )
 
     def local_update(self, lr: float, local_update_steps: int) -> tuple[float, float]:
+        self.model.train()
         train_loss = util.Metric("Client train loss")
         train_accuracy = util.Metric("Client train accuracy")
-        self.y = 0
         for k in range(local_update_steps):
             util.set_all_grad_zero(self.model)
             batch_inputs, labels = self.get_next_input_labels()
@@ -171,6 +172,7 @@ class FedGaussianProjClient(FedClientBase):
     def local_update(
         self, lr: float, local_update_steps: int, seeds: list[int]
     ) -> tuple[float, float]:
+        self.model.train()
         train_loss = util.Metric("Client train loss")
         train_accuracy = util.Metric("Client train accuracy")
         self.y = 0
@@ -232,6 +234,7 @@ class FedZOClient(FedClientBase):
     def local_update(
         self, lr: float, local_update_steps: int, seeds: list[int]
     ) -> tuple[float, float]:
+        self.model.train()
         train_loss = util.Metric("Client train loss")
         train_accuracy = util.Metric("Client train accuracy")
         self.y = 0
@@ -290,6 +293,7 @@ class ScaffoldClient(FedClientBase):
     def local_update(
         self, lr: float, local_update_steps: int, global_c: torch.Tensor
     ) -> tuple[float, float]:
+        self.model.train()
         train_loss = util.Metric("Client train loss")
         train_accuracy = util.Metric("Client train accuracy")
         init_model = util.get_flatten_model_param(self.model)
