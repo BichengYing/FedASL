@@ -310,7 +310,7 @@ class ScaffoldClient(FedClientBase):
 
         # We have to use option 2.
         self.delta_model = util.get_flatten_model_param(self.model) - init_model
-        self.delta_c = -global_c - self.delta_model / (local_update_steps / lr)
+        self.delta_c = -global_c - self.delta_model / (local_update_steps * lr)
         self.local_c += self.delta_c
 
         train_loss.update(loss.detach().item())
