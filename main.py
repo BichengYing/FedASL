@@ -51,18 +51,18 @@ def setup_clients(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="FedASL trainning")
-    parser.add_argument("--train-batch-size", type=int, default=128)
+    parser.add_argument("--train-batch-size", type=int, default=64)
     parser.add_argument("--test-batch-size", type=int, default=256)
-    parser.add_argument("--lr", type=float, default=0.0005, help="Learning rate")
-    parser.add_argument("--iterations", type=int, default=1000, help="Number of iterations")
+    parser.add_argument("--lr", type=float, default=0.01, help="Learning rate")
+    parser.add_argument("--iterations", type=int, default=1e4, help="Number of iterations")
     parser.add_argument("--num-clients", type=int, default=16)
     parser.add_argument("--num_sample_clients", type=int, default=4)
-    parser.add_argument("--local_update", type=int, default=4)
+    parser.add_argument("--local_update", type=int, default=3)
     parser.add_argument("--dataset", type=str, default="mnist", help="[mnist, fashion, cifar10]")
     parser.add_argument("--seed", type=int, default=99, help="random seed")
     parser.add_argument("--dtype", type=str, default="float32", help="random seed")
     parser.add_argument("--arb_client_sampling", action="store_true", default=False)
-    parser.add_argument("--eval-iterations", type=int, default=10)
+    parser.add_argument("--eval-iterations", type=int, default=20)
     parser.add_argument(
         "--method", type=str, default="fedgproj", help="[fedasl, fedavg, fedgproj, fedzo, scaffold]"
     )
