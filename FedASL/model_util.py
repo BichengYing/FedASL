@@ -21,7 +21,9 @@ def prepare_models(
         client_models = [models.CNN_MNIST().to(torch_dtype).to(device) for device in client_devices]
     elif dataset_name == "cifar10":
         server_model = models.CNN_CIFAR10().to(torch_dtype).to(server_device)
-        client_models = [models.CNN_CIFAR10().to(torch_dtype).to(device) for device in client_devices]
+        client_models = [
+            models.CNN_CIFAR10().to(torch_dtype).to(device) for device in client_devices
+        ]
     elif dataset_name == "fashion":
         server_model = models.CNN_FMNIST().to(torch_dtype).to(server_device)
         client_models = [

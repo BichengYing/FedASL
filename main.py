@@ -1,5 +1,6 @@
 import argparse
 import numpy as np
+import logging
 import torch
 from tqdm import tqdm
 
@@ -104,6 +105,13 @@ if __name__ == "__main__":
         local_update_steps=args.local_update,
         **kwargs,
     )
+    sampling_str = "arbitrary" if args.arb_client_sampling else "uniform"
+    logging.basicConfig(
+        filename=f"{args.method}_{sampling_str}_{args.dataset}.log",
+        level=logging.DEBUG,
+        format="%(asctime)s, %(message)s",
+    )
+    logging.info("Iteration, Mode, loss, accuracy")
 
     with tqdm(total=args.iterations, desc="Training:") as t:
         np.random.seed(args.seed)
@@ -116,8 +124,10 @@ if __name__ == "__main__":
         for ite in range(args.iterations):
             step_loss, step_accuracy = server.train_one_step(args.lr, sampling_prob)
             t.set_postfix({"Loss": step_loss, "Accuracy": step_accuracy})
+            logging.info("%d, %s, %f, %f", ite, "train", step_loss, step_accuracy)
             t.update(1)
 
             # eval
             if args.eval_iterations != 0 and (ite + 1) % args.eval_iterations == 0:
                 eval_loss, eval_accuracy = server.eval_model(test_loader, ite)
+                logging.info("%d, %s, %f, %f", ite, "eval", eval_loss, eval_accuracy)
