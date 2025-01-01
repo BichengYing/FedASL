@@ -52,12 +52,12 @@ def setup_clients(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="FedASL trainning")
-    parser.add_argument("--train-batch-size", type=int, default=64)
+    parser.add_argument("--train-batch-size", type=int, default=128)
     parser.add_argument("--test-batch-size", type=int, default=256)
     parser.add_argument("--lr", type=float, default=0.01, help="Learning rate")
     parser.add_argument("--iterations", type=int, default=1e4, help="Number of iterations")
-    parser.add_argument("--num-clients", type=int, default=16)
-    parser.add_argument("--num-sample_clients", type=int, default=4)
+    parser.add_argument("--num-clients", type=int, default=100)
+    parser.add_argument("--num-sample-clients", type=int, default=10)
     parser.add_argument("--local-update", type=int, default=3)
     parser.add_argument("--dataset", type=str, default="mnist", help="[mnist, fashion, cifar10]")
     parser.add_argument("--seed", type=int, default=99, help="random seed")
