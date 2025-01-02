@@ -54,21 +54,22 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="FedASL trainning")
     parser.add_argument("--train-batch-size", type=int, default=128)
     parser.add_argument("--test-batch-size", type=int, default=256)
-    parser.add_argument("--lr", type=float, default=0.01, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=5e-3, help="Learning rate")
     parser.add_argument("--iterations", type=int, default=1e4, help="Number of iterations")
     parser.add_argument("--num-clients", type=int, default=100)
     parser.add_argument("--num-sample-clients", type=int, default=10)
-    parser.add_argument("--local-update", type=int, default=3)
+    parser.add_argument("--local-update", type=int, default=2)
     parser.add_argument("--dataset", type=str, default="mnist", help="[mnist, fashion, cifar10]")
-    parser.add_argument("--seed", type=int, default=99, help="random seed")
+    parser.add_argument("--seed", type=int, default=66, help="random seed")
     parser.add_argument("--dtype", type=str, default="float32", help="random seed")
     parser.add_argument("--arb-client-sampling", action="store_true", default=False)
-    parser.add_argument("--eval-iterations", type=int, default=20)
+    parser.add_argument("--eval-iterations", type=int, default=25)
     parser.add_argument(
-        "--method", type=str, default="fedgproj", help="[fedasl, fedavg, fedgproj, fedzo, scaffold]"
+        "--method", type=str, default="fedavg", help="[fedasl, fedavg, fedgproj, fedzo, scaffold]"
     )
     parser.add_argument("--iid", action="store_true", default=False)
-    parser.add_argument("--dirichlet-alpha", type=float, default=1)
+    parser.add_argument("--dirichlet-alpha", type=float, default=0.1)
+    parser.add_argument("--participation", type=str, default="bern", help=["bern", "markov"])
     
     # Per method specified args
     parser.add_argument("--num-pert", type=int, default=10)
@@ -114,7 +115,7 @@ if __name__ == "__main__":
     )
     sampling_str = "arbitrary" if args.arb_client_sampling else "uniform"
     logging.basicConfig(
-        filename=f"{args.method}_{sampling_str}_{args.dataset}.log",
+        filename=f"{args.method}_{sampling_str}_{args.dataset}_{args.lr}_{args.participation}_{args.local_update}.log",
         level=logging.DEBUG,
         format="%(asctime)s, %(message)s",
     )
@@ -122,19 +123,22 @@ if __name__ == "__main__":
 
     with tqdm(total=args.iterations, desc="Training:") as t:
         np.random.seed(args.seed)
-        if args.arb_client_sampling:
-            sampling_prob = np.random.rand(args.num_clients) + 0.05
-            sampling_prob /= sum(sampling_prob)
-        else:
-            sampling_prob = np.ones(args.num_clients) / args.num_clients
-        print(f"{sampling_prob=}")
         for ite in range(args.iterations):
-            step_loss, step_accuracy = server.train_one_step(args.lr, sampling_prob)
+            # Arbitrary sampling
+            if args.arb_client_sampling:
+                if args.participation == "bern": 
+                    client_probabilities = np.random.uniform(0.1, 0.9, size=args.num_clients)
+                    sampling_prob = np.random.binomial(1, client_probabilities)
+                elif args.participation == "markov": 
+                    pass
+            else:
+                sampling_prob = np.ones(args.num_clients) / args.num_clients
+            step_loss, step_accuracy = server.train_one_step(args.lr, sampling_prob, args.participation)
             t.set_postfix({"Loss": step_loss, "Accuracy": step_accuracy})
             logging.info("%d, %s, %f, %f", ite, "train", step_loss, step_accuracy)
             t.update(1)
 
-            # eval
+            # Evaluation
             if args.eval_iterations != 0 and (ite + 1) % args.eval_iterations == 0:
                 eval_loss, eval_accuracy = server.eval_model(test_loader, ite)
                 logging.info("%d, %s, %f, %f", ite, "eval", eval_loss, eval_accuracy)
