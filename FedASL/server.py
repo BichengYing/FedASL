@@ -151,6 +151,58 @@ class FedAvgServer(FedServerBase):
         return step_train_loss.avg, step_train_accuracy.avg
 
 
+class FedAUServer(FedServerBase):
+    def __init__(
+        self,
+        clients: Sequence[fl_client.FedAUClient],
+        device: torch.device,
+        server_model: torch.nn.Module,
+        server_criterion: Any,
+        server_accuracy_func: Callable,
+        num_sample_clients: int = 10,
+        local_update_steps: int = 10,
+    ) -> None:
+        super().__init__(
+            clients=clients,
+            device=device,
+            server_model=server_model,
+            server_criterion=server_criterion,
+            server_accuracy_func=server_accuracy_func,
+            num_sample_clients=num_sample_clients,
+            local_update_steps=local_update_steps,
+        )
+
+    def train_one_step(self, lr: float, sampling_prob: Sequence[float], participation: str) -> tuple[float, float]:
+        sampled_clients: list[int] = self.get_sampled_client_index(sampling_prob, participation)
+
+        step_train_loss = util.Metric("train_loss")
+        step_train_accuracy = util.Metric("train_loss")
+        for client in sampled_clients:
+            client.pull_model(self.server_model)
+            client_loss, client_accuracy = client.local_update(lr, self.local_update_steps)
+            step_train_loss.update(client_loss)
+            step_train_accuracy.update(client_accuracy)
+        
+        for client in self.clients: 
+            if client in sampled_clients: 
+                client.update_weight(participated=1)
+            else: 
+                client.update_weight(participated=0)
+
+        # Update the server model
+        weighted_avg_model = 0
+        total_weight = 0
+        for client in sampled_clients:
+            model, weight = client.push_step()
+            # print(weight)
+            weighted_avg_model += model * weight
+            total_weight += weight
+        weighted_avg_model.div_(total_weight)
+        util.set_flatten_model_back(self.server_model, weighted_avg_model)
+
+        return step_train_loss.avg, step_train_accuracy.avg
+    
+
 # Theoratical we just need seed to communicate between server and client. Here
 # we just use FedAvg for simplicity since it is equivalent.
 class FedGaussianProjServer(FedServerBase):

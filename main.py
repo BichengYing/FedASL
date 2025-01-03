@@ -16,6 +16,7 @@ client_class_map = {
     "fedgproj": fl_client.FedGaussianProjClient,
     "fedzo": fl_client.FedZOClient,
     "scaffold": fl_client.ScaffoldClient,
+    "fedau": fl_client.FedAUClient,
 }
 server_class_map = {
     "fedavg": fl_server.FedAvgServer,
@@ -23,6 +24,7 @@ server_class_map = {
     "fedgproj": fl_server.FedGaussianProjServer,
     "fedzo": fl_server.FedZOServer,
     "scaffold": fl_server.ScaffoldServer,
+    "fedau": fl_server.FedAUServer,
 }
 
 
@@ -57,7 +59,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=5e-3, help="Learning rate")
     parser.add_argument("--iterations", type=int, default=1e4, help="Number of iterations")
     parser.add_argument("--num-clients", type=int, default=100)
-    parser.add_argument("--num-sample-clients", type=int, default=10)
+    parser.add_argument("--num-sample-clients", type=int, default=4)
     parser.add_argument("--local-update", type=int, default=2)
     parser.add_argument("--dataset", type=str, default="mnist", help="[mnist, fashion, cifar10]")
     parser.add_argument("--seed", type=int, default=66, help="random seed")
@@ -65,7 +67,7 @@ if __name__ == "__main__":
     parser.add_argument("--arb-client-sampling", action="store_true", default=False)
     parser.add_argument("--eval-iterations", type=int, default=25)
     parser.add_argument(
-        "--method", type=str, default="fedavg", help="[fedasl, fedavg, fedgproj, fedzo, scaffold]"
+        "--method", type=str, default="fedavg", help="[fedasl, fedavg, fedgproj, fedzo, scaffold, fedau]"
     )
     parser.add_argument("--iid", action="store_true", default=False)
     parser.add_argument("--dirichlet-alpha", type=float, default=0.1)
@@ -123,15 +125,18 @@ if __name__ == "__main__":
 
     with tqdm(total=args.iterations, desc="Training:") as t:
         np.random.seed(args.seed)
+        if args.participation == "bern": 
+            client_probabilities_low = np.random.uniform(0.1, 0.3, size=int(args.num_clients * 0.9))
+            client_probabilities_high = np.random.uniform(0.1, 0.9, size=int(args.num_clients * 0.1))
+            client_probabilities = np.concatenate([client_probabilities_low, client_probabilities_high])
         for ite in range(args.iterations):
             # Arbitrary sampling
             if args.arb_client_sampling:
                 if args.participation == "bern": 
-                    client_probabilities = np.random.uniform(0.1, 0.9, size=args.num_clients)
                     sampling_prob = np.random.binomial(1, client_probabilities)
                 elif args.participation == "markov": 
                     pass
-            else:
+            else: 
                 sampling_prob = np.ones(args.num_clients) / args.num_clients
             step_loss, step_accuracy = server.train_one_step(args.lr, sampling_prob, args.participation)
             t.set_postfix({"Loss": step_loss, "Accuracy": step_accuracy})

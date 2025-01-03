@@ -97,9 +97,10 @@ class FedASLClient(FedClientBase):
             loss = self.criterion(pred, labels)
             loss.backward()
 
-            self.grad_curr = util.get_flatten_model_grad(self.model)
-            self.y = self.y + self.grad_curr - self.grad_prev
-            self.grad_prev = self.grad_curr
+            with torch.no_grad:
+                self.grad_curr = util.get_flatten_model_grad(self.model)
+                self.y = self.y + self.grad_curr - self.grad_prev
+                self.grad_prev = self.grad_curr
 
         train_loss.update(loss.detach().item())
         train_accuracy.update(self.accuracy_func(pred, labels).detach().item())
@@ -150,6 +151,68 @@ class FedAvgClient(FedClientBase):
 
     def push_step(self) -> torch.Tensor:
         return util.get_flatten_model_param(self.model)
+
+
+class FedAUClient(FedClientBase):
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        dataloader: DataLoader,
+        criterion: Any,
+        accuracy_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+        device: torch.device | str = "cpu",
+    ):
+        super().__init__(
+            model=model,
+            dataloader=dataloader,
+            criterion=criterion,
+            accuracy_func=accuracy_func,
+            device=device,
+        )
+        self.K = 10
+        self.participation_counter = 0 # M_n
+        self.weight = 1.0
+        self.total_intervals = 0 # S*_n 
+        # self.delta_model = None
+        
+
+    def local_update(self, lr: float, local_update_steps: int) -> tuple[float, float]:
+        self.model.train()
+        train_loss = util.Metric("Client train loss")
+        train_accuracy = util.Metric("Client train accuracy")
+        for k in range(local_update_steps):
+            util.set_all_grad_zero(self.model)
+            batch_inputs, labels = self.get_next_input_labels()
+            pred = self.model(batch_inputs)
+            loss = self.criterion(pred, labels)
+            loss.backward()
+
+            with torch.no_grad():  # manually update model
+                for p in self.model.parameters():
+                    if p.requires_grad and p.grad is not None:
+                        p.data.add_(p.grad, alpha=-lr)
+
+        train_loss.update(loss.detach().item())
+        train_accuracy.update(self.accuracy_func(pred, labels).detach().item())
+        
+        return train_loss.avg, train_accuracy.avg
+
+    def push_step(self) -> torch.Tensor:
+        return util.get_flatten_model_param(self.model), self.weight
+    
+    
+    def update_weight(self, participated: int):
+        self.total_intervals += 1
+        if participated == 1 or self.total_intervals == self.K:
+            S_n = self.total_intervals
+            if self.participation_counter == 0:
+                self.weight = S_n
+            else:
+                self.weight = (self.participation_counter * self.weight + S_n) / (self.participation_counter + 1)
+                self.participation_counter += 1
+                self.total_intervals = 0
+        else:
+            pass    
 
 
 class FedGaussianProjClient(FedClientBase):
