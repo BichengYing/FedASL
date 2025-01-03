@@ -31,7 +31,7 @@ def prepare_dataloaders(
     train_batch_size: int,
     test_batch_size: int = 1000,
     seed: int = 12345,
-    alpha: float = None, 
+    alpha: float = None,
     **kwargs,
 ) -> tuple[list[torch.utils.data.DataLoader], torch.utils.data.DataLoader]:
     if dataset_name == "mnist":
@@ -87,16 +87,20 @@ def prepare_dataloaders(
     else:
         raise Exception(f"Dataset {dataset_name} is not supported")
 
-    if alpha is None: # IID
+    if alpha is None:  # IID
         splitted_train_sets = torch.utils.data.random_split(
             train_dataset,
             [1 / num_clients for _ in range(num_clients)],  # Uniform split
             generator=torch.Generator().manual_seed(seed),
         )
-    else: # Non-IID
+    else:  # Non-IID
         labels = list(map(lambda x: x[1], train_dataset))
         splitted_train_sets = dirichlet_split(
-            train_dataset, labels, num_clients, alpha, seed, 
+            train_dataset,
+            labels,
+            num_clients,
+            alpha,
+            seed,
         )
     splitted_train_loaders = []
     for i in range(num_clients):

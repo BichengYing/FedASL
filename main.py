@@ -67,12 +67,15 @@ if __name__ == "__main__":
     parser.add_argument("--arb-client-sampling", action="store_true", default=False)
     parser.add_argument("--eval-iterations", type=int, default=25)
     parser.add_argument(
-        "--method", type=str, default="fedavg", help="[fedasl, fedavg, fedgproj, fedzo, scaffold, fedau]"
+        "--method",
+        type=str,
+        default="fedavg",
+        help="[fedasl, fedavg, fedgproj, fedzo, scaffold, fedau]",
     )
     parser.add_argument("--iid", action="store_true", default=False)
     parser.add_argument("--dirichlet-alpha", type=float, default=0.1)
     parser.add_argument("--participation", type=str, default="bern", help=["bern", "markov"])
-    
+
     # Per method specified args
     parser.add_argument("--num-pert", type=int, default=10)
     parser.add_argument("--same-seed", action="store_true", default=False)
@@ -82,13 +85,18 @@ if __name__ == "__main__":
         raise ValueError(f"--method in args must be one of {list(client_class_map.keys())}")
 
     server_device, client_devices = data_util.auto_select_devices(args.num_clients)
-    if args.iid: # IID
+    if args.iid:  # IID
         train_loaders, test_loader = data_util.prepare_dataloaders(
             args.dataset, args.num_clients, args.train_batch_size, args.test_batch_size, args.seed
         )
-    else: # Non-IID
+    else:  # Non-IID
         train_loaders, test_loader = data_util.prepare_dataloaders(
-            args.dataset, args.num_clients, args.train_batch_size, args.test_batch_size, args.seed, args.dirichlet_alpha,
+            args.dataset,
+            args.num_clients,
+            args.train_batch_size,
+            args.test_batch_size,
+            args.seed,
+            args.dirichlet_alpha,
         )
     client_models, server_model = model_util.prepare_models(
         args.dataset, args.num_clients, client_devices, server_device, args.dtype
@@ -125,30 +133,35 @@ if __name__ == "__main__":
 
     with tqdm(total=args.iterations, desc="Training:") as t:
         np.random.seed(args.seed)
-        if args.participation == "bern": 
+        if args.participation == "bern":
             client_probabilities_low = np.random.uniform(0.1, 0.3, size=int(args.num_clients * 0.9))
-            client_probabilities_high = np.random.uniform(0.1, 0.9, size=int(args.num_clients * 0.1))
-            client_probabilities = np.concatenate([client_probabilities_low, client_probabilities_high])
-        elif args.participation == "markov": 
+            client_probabilities_high = np.random.uniform(
+                0.1, 0.9, size=int(args.num_clients * 0.1)
+            )
+            client_probabilities = np.concatenate(
+                [client_probabilities_low, client_probabilities_high]
+            )
+        elif args.participation == "markov":
             client_probabilities = np.random.uniform(0.1, 0.9, size=int(args.num_clients))
-            transition_matrix = np.array([[0.8, 0.2], 
-                                          [0.8, 0.2]])
+            transition_matrix = np.array([[0.8, 0.2], [0.8, 0.2]])
             current_states = np.random.binomial(1, client_probabilities)
         for ite in range(args.iterations):
             # Arbitrary sampling
             if args.arb_client_sampling:
-                if args.participation == "bern": 
+                if args.participation == "bern":
                     sampling_prob = np.random.binomial(1, client_probabilities)
-                elif args.participation == "markov": 
+                elif args.participation == "markov":
                     sampling_prob = []
-                    for i in range(args.num_clients): 
+                    for i in range(args.num_clients):
                         current_state = current_states[i]
                         next_state = np.random.choice([0, 1], p=transition_matrix[current_state])
                         current_states[i] = next_state
                         sampling_prob.append(next_state)
-            else: 
+            else:
                 sampling_prob = np.ones(args.num_clients) / args.num_clients
-            step_loss, step_accuracy = server.train_one_step(args.lr, sampling_prob, args.participation)
+            step_loss, step_accuracy = server.train_one_step(
+                args.lr, sampling_prob, args.participation
+            )
             t.set_postfix({"Loss": step_loss, "Accuracy": step_accuracy})
             logging.info("%d, %s, %f, %f", ite, "train", step_loss, step_accuracy)
             t.update(1)

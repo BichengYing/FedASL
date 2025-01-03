@@ -35,15 +35,17 @@ class FedServerBase:
         assert len(self.clients) == len(prob)
         # TODO(ybc) make this function control from the outside
         clients_list = list(self.clients)
-        if participation == "bern": 
+        if participation == "bern":
             list_index = np.where(prob == 1)[0]
-        elif participation == "markov": 
+        elif participation == "markov":
             list_index = [i for i, value in enumerate(prob) if value == 1]
         selected_clients = {clients_list[i] for i in list_index}
         return selected_clients
 
     @abc.abstractmethod
-    def train_one_step(self, sampling_prob: Sequence[float], participation: str) -> tuple[float, float]:
+    def train_one_step(
+        self, sampling_prob: Sequence[float], participation: str
+    ) -> tuple[float, float]:
         """One step for the training"""
 
     def eval_model(self, test_loader: Iterable[Any], iteration: int) -> tuple[float, float]:
@@ -87,8 +89,12 @@ class FedASLServer(FedServerBase):
             local_update_steps=local_update_steps,
         )
 
-    def train_one_step(self, lr: float, sampling_prob: Sequence[float], participation: str) -> tuple[float, float]:
+    def train_one_step(
+        self, lr: float, sampling_prob: Sequence[float], participation: str
+    ) -> tuple[float, float]:
         sampled_clients: list[int] = self.get_sampled_client_index(sampling_prob, participation)
+        if not sampled_clients:
+            return np.nan, np.nan
 
         step_train_loss = util.Metric("train_loss")
         step_train_accuracy = util.Metric("train_loss")
@@ -129,8 +135,12 @@ class FedAvgServer(FedServerBase):
             local_update_steps=local_update_steps,
         )
 
-    def train_one_step(self, lr: float, sampling_prob: Sequence[float], participation: str) -> tuple[float, float]:
+    def train_one_step(
+        self, lr: float, sampling_prob: Sequence[float], participation: str
+    ) -> tuple[float, float]:
         sampled_clients: list[int] = self.get_sampled_client_index(sampling_prob, participation)
+        if not sampled_clients:
+            return np.nan, np.nan
 
         step_train_loss = util.Metric("train_loss")
         step_train_accuracy = util.Metric("train_loss")
@@ -172,8 +182,12 @@ class FedAUServer(FedServerBase):
             local_update_steps=local_update_steps,
         )
 
-    def train_one_step(self, lr: float, sampling_prob: Sequence[float], participation: str) -> tuple[float, float]:
+    def train_one_step(
+        self, lr: float, sampling_prob: Sequence[float], participation: str
+    ) -> tuple[float, float]:
         sampled_clients: list[int] = self.get_sampled_client_index(sampling_prob, participation)
+        if not sampled_clients:
+            return np.nan, np.nan
 
         step_train_loss = util.Metric("train_loss")
         step_train_accuracy = util.Metric("train_loss")
@@ -182,11 +196,11 @@ class FedAUServer(FedServerBase):
             client_loss, client_accuracy = client.local_update(lr, self.local_update_steps)
             step_train_loss.update(client_loss)
             step_train_accuracy.update(client_accuracy)
-        
-        for client in self.clients: 
-            if client in sampled_clients: 
+
+        for client in self.clients:
+            if client in sampled_clients:
                 client.update_weight(participated=1)
-            else: 
+            else:
                 client.update_weight(participated=0)
 
         # Update the server model
@@ -201,7 +215,7 @@ class FedAUServer(FedServerBase):
         util.set_flatten_model_back(self.server_model, weighted_avg_model)
 
         return step_train_loss.avg, step_train_accuracy.avg
-    
+
 
 # Theoratical we just need seed to communicate between server and client. Here
 # we just use FedAvg for simplicity since it is equivalent.
@@ -325,8 +339,12 @@ class ScaffoldServer(FedServerBase):
             local_update_steps=local_update_steps,
         )
 
-    def train_one_step(self, lr: float, sampling_prob: Sequence[float], participation: str) -> tuple[float, float]:
+    def train_one_step(
+        self, lr: float, sampling_prob: Sequence[float], participation: str
+    ) -> tuple[float, float]:
         sampled_clients: list[int] = self.get_sampled_client_index(sampling_prob, participation)
+        if not sampled_clients:
+            return np.nan, np.nan
 
         step_train_loss = util.Metric("train_loss")
         step_train_accuracy = util.Metric("train_loss")

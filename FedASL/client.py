@@ -169,11 +169,10 @@ class FedAUClient(FedClientBase):
             device=device,
         )
         self.K = 10
-        self.participation_counter = 0 # M_n
+        self.participation_counter = 0  # M_n
         self.weight = 1.0
-        self.total_intervals = 0 # S*_n 
+        self.total_intervals = 0  # S*_n
         # self.delta_model = None
-        
 
     def local_update(self, lr: float, local_update_steps: int) -> tuple[float, float]:
         self.model.train()
@@ -193,13 +192,12 @@ class FedAUClient(FedClientBase):
 
         train_loss.update(loss.detach().item())
         train_accuracy.update(self.accuracy_func(pred, labels).detach().item())
-        
+
         return train_loss.avg, train_accuracy.avg
 
     def push_step(self) -> torch.Tensor:
         return util.get_flatten_model_param(self.model), self.weight
-    
-    
+
     def update_weight(self, participated: int):
         self.total_intervals += 1
         if participated == 1 or self.total_intervals == self.K:
@@ -207,11 +205,13 @@ class FedAUClient(FedClientBase):
             if self.participation_counter == 0:
                 self.weight = S_n
             else:
-                self.weight = (self.participation_counter * self.weight + S_n) / (self.participation_counter + 1)
+                self.weight = (self.participation_counter * self.weight + S_n) / (
+                    self.participation_counter + 1
+                )
                 self.participation_counter += 1
                 self.total_intervals = 0
         else:
-            pass    
+            pass
 
 
 class FedGaussianProjClient(FedClientBase):
