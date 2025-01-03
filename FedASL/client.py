@@ -97,10 +97,9 @@ class FedASLClient(FedClientBase):
             loss = self.criterion(pred, labels)
             loss.backward()
 
-            with torch.no_grad:
-                self.grad_curr = util.get_flatten_model_grad(self.model)
-                self.y = self.y + self.grad_curr - self.grad_prev
-                self.grad_prev = self.grad_curr
+            self.grad_curr = util.get_flatten_model_grad(self.model)
+            self.y = self.y + self.grad_curr - self.grad_prev
+            self.grad_prev = self.grad_curr
 
         train_loss.update(loss.detach().item())
         train_accuracy.update(self.accuracy_func(pred, labels).detach().item())

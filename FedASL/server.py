@@ -38,7 +38,7 @@ class FedServerBase:
         if participation == "bern": 
             list_index = np.where(prob == 1)[0]
         elif participation == "markov": 
-            pass
+            list_index = [i for i, value in enumerate(prob) if value == 1]
         selected_clients = {clients_list[i] for i in list_index}
         return selected_clients
 

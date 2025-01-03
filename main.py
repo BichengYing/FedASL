@@ -59,7 +59,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=5e-3, help="Learning rate")
     parser.add_argument("--iterations", type=int, default=1e4, help="Number of iterations")
     parser.add_argument("--num-clients", type=int, default=100)
-    parser.add_argument("--num-sample-clients", type=int, default=4)
+    parser.add_argument("--num-sample-clients", type=int, default=10)
     parser.add_argument("--local-update", type=int, default=2)
     parser.add_argument("--dataset", type=str, default="mnist", help="[mnist, fashion, cifar10]")
     parser.add_argument("--seed", type=int, default=66, help="random seed")
@@ -129,13 +129,23 @@ if __name__ == "__main__":
             client_probabilities_low = np.random.uniform(0.1, 0.3, size=int(args.num_clients * 0.9))
             client_probabilities_high = np.random.uniform(0.1, 0.9, size=int(args.num_clients * 0.1))
             client_probabilities = np.concatenate([client_probabilities_low, client_probabilities_high])
+        elif args.participation == "markov": 
+            client_probabilities = np.random.uniform(0.1, 0.9, size=int(args.num_clients))
+            transition_matrix = np.array([[0.8, 0.2], 
+                                          [0.8, 0.2]])
+            current_states = np.random.binomial(1, client_probabilities)
         for ite in range(args.iterations):
             # Arbitrary sampling
             if args.arb_client_sampling:
                 if args.participation == "bern": 
                     sampling_prob = np.random.binomial(1, client_probabilities)
                 elif args.participation == "markov": 
-                    pass
+                    sampling_prob = []
+                    for i in range(args.num_clients): 
+                        current_state = current_states[i]
+                        next_state = np.random.choice([0, 1], p=transition_matrix[current_state])
+                        current_states[i] = next_state
+                        sampling_prob.append(next_state)
             else: 
                 sampling_prob = np.ones(args.num_clients) / args.num_clients
             step_loss, step_accuracy = server.train_one_step(args.lr, sampling_prob, args.participation)
