@@ -60,7 +60,7 @@ if __name__ == "__main__":
     parser.add_argument("--iterations", type=int, default=1e4, help="Number of iterations")
     parser.add_argument("--num-clients", type=int, default=100)
     parser.add_argument("--num-sample-clients", type=int, default=10)
-    parser.add_argument("--local-update", type=int, default=2)
+    parser.add_argument("--local-update", type=int, default=3)
     parser.add_argument("--dataset", type=str, default="mnist", help="[mnist, fashion, cifar10]")
     parser.add_argument("--seed", type=int, default=66, help="random seed")
     parser.add_argument("--dtype", type=str, default="float32", help="random seed")
