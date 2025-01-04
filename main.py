@@ -64,7 +64,6 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", type=str, default="mnist", help="[mnist, fashion, cifar10]")
     parser.add_argument("--seed", type=int, default=66, help="random seed")
     parser.add_argument("--dtype", type=str, default="float32", help="random seed")
-    parser.add_argument("--arb-client-sampling", action="store_true", default=False)
     parser.add_argument("--eval-iterations", type=int, default=25)
     parser.add_argument(
         "--method",
@@ -74,7 +73,9 @@ if __name__ == "__main__":
     )
     parser.add_argument("--iid", action="store_true", default=False)
     parser.add_argument("--dirichlet-alpha", type=float, default=0.1)
-    parser.add_argument("--participation", type=str, default="bern", help=["bern", "markov"])
+    parser.add_argument(
+        "--participation", type=str, default="bern", help=["bern", "markov", "uniform"]
+    )
 
     # Per method specified args
     parser.add_argument("--num-pert", type=int, default=10)
@@ -123,9 +124,8 @@ if __name__ == "__main__":
         local_update_steps=args.local_update,
         **kwargs,
     )
-    sampling_str = "arbitrary" if args.arb_client_sampling else "uniform"
     logging.basicConfig(
-        filename=f"{args.method}_{sampling_str}_{args.dataset}_{args.lr}_{args.participation}_{args.local_update}.log",
+        filename=f"{args.method}_{args.dataset}_{args.lr}_{args.participation}_{args.local_update}.log",
         level=logging.DEBUG,
         format="%(asctime)s, %(message)s",
     )
@@ -147,18 +147,19 @@ if __name__ == "__main__":
             current_states = np.random.binomial(1, client_probabilities)
         for ite in range(args.iterations):
             # Arbitrary sampling
-            if args.arb_client_sampling:
-                if args.participation == "bern":
-                    sampling_prob = np.random.binomial(1, client_probabilities)
-                elif args.participation == "markov":
-                    sampling_prob = []
-                    for i in range(args.num_clients):
-                        current_state = current_states[i]
-                        next_state = np.random.choice([0, 1], p=transition_matrix[current_state])
-                        current_states[i] = next_state
-                        sampling_prob.append(next_state)
-            else:
+            if args.participation == "bern":
+                sampling_prob = np.random.binomial(1, client_probabilities)
+            elif args.participation == "markov":
+                sampling_prob = []
+                for i in range(args.num_clients):
+                    current_state = current_states[i]
+                    next_state = np.random.choice([0, 1], p=transition_matrix[current_state])
+                    current_states[i] = next_state
+                    sampling_prob.append(next_state)
+            elif args.participation == "uniform":
                 sampling_prob = np.ones(args.num_clients) / args.num_clients
+            else:
+                raise ValueError(f"Unknown {args.participation=}")
             step_loss, step_accuracy = server.train_one_step(
                 args.lr, sampling_prob, args.participation
             )
