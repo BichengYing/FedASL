@@ -33,7 +33,7 @@ class FedServerBase:
 
     def get_sampled_client_index(self, prob: Sequence[float], participation: str) -> list[int]:
         assert len(self.clients) == len(prob)
-        # TODO(ybc) make this function control from the outside
+        # TODO: make this function control from the outside
         clients_list = list(self.clients)
         if participation == "bern":
             list_index = np.where(prob == 1)[0]
