@@ -41,7 +41,7 @@ class FedServerBase:
             list_index = [i for i, value in enumerate(prob) if value == 1]
         elif participation == "uniform":
             list_index = np.random.choice(
-                np.arange(len(self.clients)), replace=True, size=self.num_sample_clients, p=prob
+                np.arange(len(self.clients)), replace=False, size=self.num_sample_clients, p=prob
             )
         selected_clients = {clients_list[i] for i in list_index}
         return selected_clients
