@@ -17,6 +17,7 @@ client_class_map = {
     "fedzo": fl_client.FedZOClient,
     "scaffold": fl_client.ScaffoldClient,
     "fedau": fl_client.FedAUClient,
+    "fedhazo": fl_client.FedHessianAwareZOClient,
 }
 server_class_map = {
     "fedavg": fl_server.FedAvgServer,
@@ -25,6 +26,7 @@ server_class_map = {
     "fedzo": fl_server.FedZOServer,
     "scaffold": fl_server.ScaffoldServer,
     "fedau": fl_server.FedAUServer,
+    "fedhazo": fl_server.FedHessianAwareZOServer,
 }
 
 
@@ -80,6 +82,8 @@ if __name__ == "__main__":
     # Per method specified args
     parser.add_argument("--num-pert", type=int, default=10)
     parser.add_argument("--same-seed", action="store_true", default=False)
+    parser.add_argument("--gamma", type=float, default=0.95, help="hessian coef")
+    parser.add_argument("--beta", type=float, default=0.9, help="momentum coef")
 
     args = parser.parse_args()
     if args.method.lower() not in client_class_map.keys():
@@ -112,6 +116,10 @@ if __name__ == "__main__":
     if args.method == "fedzo":
         kwargs["num_pert"] = args.num_pert
         kwargs["same_seed"] = bool(args.same_seed)
+    if args.method == "fedhazo":
+        kwargs["num_pert"] = args.num_pert
+        kwargs["gamma"] = args.gamma
+        kwargs["beta"] = args.beta
     print(kwargs)
 
     server = server_class(

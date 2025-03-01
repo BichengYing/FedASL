@@ -48,7 +48,7 @@ class FedServerBase:
 
     @abc.abstractmethod
     def train_one_step(
-        self, sampling_prob: Sequence[float], participation: str
+        self, sampling_prob: Sequence[float], participation: str, **kwargs
     ) -> tuple[float, float]:
         """One step for the training"""
 
@@ -294,8 +294,10 @@ class FedZOServer(FedServerBase):
             local_update_steps=local_update_steps,
         )
 
-    def train_one_step(self, lr: float, sampling_prob: Sequence[float]) -> tuple[float, float]:
-        sampled_clients: list[int] = self.get_sampled_client_index(sampling_prob)
+    def train_one_step(
+        self, lr: float, sampling_prob: Sequence[float], participation: str
+    ) -> tuple[float, float]:
+        sampled_clients: list[int] = self.get_sampled_client_index(sampling_prob, participation)
 
         step_train_loss = util.Metric("train_loss")
         step_train_accuracy = util.Metric("train_loss")
@@ -315,6 +317,76 @@ class FedZOServer(FedServerBase):
             avg_model += client.push_step()
         avg_model.div_(len(sampled_clients))
         util.set_flatten_model_back(self.server_model, avg_model)
+
+        return step_train_loss.avg, step_train_accuracy.avg
+
+
+class FedHessianAwareZOServer(FedServerBase):
+    def __init__(
+        self,
+        clients: Sequence[fl_client.FedZOClient],
+        device: torch.device,
+        server_model: torch.nn.Module,
+        server_criterion: Any,
+        server_accuracy_func: Callable,
+        num_sample_clients: int = 10,
+        local_update_steps: int = 10,
+        num_pert: int = 10,
+        same_seed: bool = True,
+        gamma: float = 0.95,
+        beta: float = 0.9,
+    ) -> None:
+        self.num_pert = num_pert
+        self.same_seed = same_seed
+        self.global_hessian = torch.tensor([1]).to(device)
+        self.global_momentum = torch.tensor([0]).to(device)
+        self.gamma = gamma  # hessian coef
+        self.beta = beta  # momentum coef
+        super().__init__(
+            clients=clients,
+            device=device,
+            server_model=server_model,
+            server_criterion=server_criterion,
+            server_accuracy_func=server_accuracy_func,
+            num_sample_clients=num_sample_clients,
+            local_update_steps=local_update_steps,
+        )
+
+    def train_one_step(
+        self, lr: float, sampling_prob: Sequence[float], participation: str
+    ) -> tuple[float, float]:
+        sampled_clients: list[int] = self.get_sampled_client_index(sampling_prob, participation)
+
+        step_train_loss = util.Metric("train_loss")
+        step_train_accuracy = util.Metric("train_loss")
+        for i, client in enumerate(sampled_clients):
+            seeds = np.random.randint(100000, size=self.num_pert)
+            if not self.same_seed:
+                seeds += i
+            client.pull_model(self.server_model)
+            client_loss, client_accuracy = client.local_update(
+                lr, self.local_update_steps, seeds, self.global_hessian, self.global_momentum
+            )
+
+            step_train_loss.update(client_loss)
+            step_train_accuracy.update(client_accuracy)
+
+        # Update the server model
+        avg_model = 0
+        avg_one_step_update = 0
+        for client in sampled_clients:
+            model, one_step_update = client.push_step()
+            avg_model += model
+            avg_one_step_update += one_step_update
+        avg_model.div_(len(sampled_clients))
+        avg_one_step_update.div_(len(sampled_clients))
+        util.set_flatten_model_back(self.server_model, avg_model)
+        self.global_hessian = self.global_hessian * self.gamma + (1 - self.gamma) * (
+            avg_one_step_update**2
+        )
+        self.global_momentum = (
+            self.global_momentum * self.beta + (1 - self.beta) * avg_one_step_update
+        )
 
         return step_train_loss.avg, step_train_accuracy.avg
 

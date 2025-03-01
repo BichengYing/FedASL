@@ -333,6 +333,80 @@ class FedZOClient(FedClientBase):
         return util.get_flatten_model_param(self.model)
 
 
+class FedHessianAwareZOClient(FedClientBase):
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        dataloader: DataLoader,
+        criterion: Any,
+        accuracy_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+        device: torch.device | str = "cpu",
+        mu: float = 1e-4,
+    ):
+        self.mu = mu
+        self.one_step_grad = 0
+        super().__init__(
+            model=model,
+            dataloader=dataloader,
+            criterion=criterion,
+            accuracy_func=accuracy_func,
+            device=device,
+        )
+
+    def perturb_model(
+        self, flatten_weight: torch.Tensor, global_hessian: torch.Tensor, alpha: float, seed: int
+    ):
+        torch.manual_seed(seed)
+        z = torch.randn_like(flatten_weight).div_(torch.sqrt(global_hessian))
+        util.set_flatten_model_back(self.model, flatten_weight.add_(z, alpha=alpha))
+
+    def local_update(
+        self,
+        lr: float,
+        local_update_steps: int,
+        seeds: list[int],
+        global_hessian: torch.Tensor,
+        global_momentum: torch.Tensor,
+    ) -> tuple[float, float]:
+        self.model.train()
+        train_loss = util.Metric("Client train loss")
+        train_accuracy = util.Metric("Client train accuracy")
+        self.y = 0
+        for k in range(local_update_steps):
+            with torch.no_grad():
+                batch_inputs, labels = self.get_next_input_labels()
+                flatten_weight = util.get_flatten_model_param(self.model)
+                update_delta = 0
+                for seed in seeds:
+                    self.perturb_model(flatten_weight, global_hessian, self.mu, seed=seed)
+                    pred = self.model(batch_inputs)
+                    loss_plus = self.criterion(pred, labels)
+                    self.perturb_model(flatten_weight, global_hessian, -2 * self.mu, seed=seed)
+                    pred = self.model(batch_inputs)
+                    loss_minus = self.criterion(pred, labels)
+                    self.perturb_model(flatten_weight, global_hessian, self.mu, seed=seed)
+                    grad_scalar = (loss_plus - loss_minus) / (2 * self.mu)
+                    torch.manual_seed(seed)
+                    z = torch.randn_like(flatten_weight).div_(torch.sqrt(global_hessian))
+                    update_delta += grad_scalar * z
+
+                self.one_step_grad = update_delta / len(seeds)
+                # manually update model
+                util.set_flatten_model_back(
+                    self.model, flatten_weight - lr * (self.one_step_grad + global_momentum)
+                )
+
+        pred = self.model(batch_inputs)
+        loss = self.criterion(pred, labels)
+        train_loss.update(loss.detach().item())
+        train_accuracy.update(self.accuracy_func(pred, labels).detach().item())
+
+        return train_loss.avg, train_accuracy.avg
+
+    def push_step(self) -> torch.Tensor:
+        return util.get_flatten_model_param(self.model), self.one_step_grad
+
+
 class ScaffoldClient(FedClientBase):
     def __init__(
         self,
