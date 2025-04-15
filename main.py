@@ -71,10 +71,10 @@ if __name__ == "__main__":
         "--method",
         type=str,
         default="fedavg",
-        help="[fedasl, fedavg, fedgproj, fedzo, scaffold, fedau]",
+        help="[fedasl, fedavg, fedgproj, fedzo, scaffold, fedau, fedhazo]",
     )
     parser.add_argument("--iid", action="store_true", default=False)
-    parser.add_argument("--dirichlet-alpha", type=float, default=0.1)
+    parser.add_argument("--dirichlet-alpha", type=float, default=5)
     parser.add_argument(
         "--participation", type=str, default="bern", help=["bern", "markov", "uniform"]
     )
@@ -153,6 +153,8 @@ if __name__ == "__main__":
             client_probabilities = np.random.uniform(0.1, 0.9, size=int(args.num_clients))
             transition_matrix = np.array([[0.8, 0.2], [0.8, 0.2]])
             current_states = np.random.binomial(1, client_probabilities)
+        runtime_kwargs = {}
+        lr_adj = 1.0
         for ite in range(args.iterations):
             # Arbitrary sampling
             if args.participation == "bern":
@@ -168,8 +170,20 @@ if __name__ == "__main__":
                 sampling_prob = np.ones(args.num_clients) / args.num_clients
             else:
                 raise ValueError(f"Unknown {args.participation=}")
+            if args.method in ["fedhazo", "fedzo"]:
+                if ite < 500:
+                    lr_adj = 1.0
+                elif ite < 1500:
+                    lr_adj = 0.5
+                    server.num_pert = args.num_pert * 2
+                else:
+                    lr_adj = 0.1
+                    server.num_pert = args.num_pert * 4
+
             step_loss, step_accuracy = server.train_one_step(
-                args.lr, sampling_prob, args.participation
+                args.lr * lr_adj,
+                sampling_prob,
+                args.participation,
             )
             t.set_postfix({"Loss": step_loss, "Accuracy": step_accuracy})
             logging.info("%d, %s, %f, %f", ite, "train", step_loss, step_accuracy)
