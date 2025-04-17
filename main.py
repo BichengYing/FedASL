@@ -196,4 +196,4 @@ if __name__ == "__main__":
                 logging.info("%d, %s, %f, %f", ite, "eval", eval_loss, eval_accuracy)
 
         if args.method == "fedhazo":
-            np.save(filename.replace(".log", ".npz"), server.global_hessian)
+            np.save(filename.replace(".log", ".npy"), server.global_hessian.cpu().numpy())
