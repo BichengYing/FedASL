@@ -82,7 +82,7 @@ if __name__ == "__main__":
     # Per method specified args
     parser.add_argument("--num-pert", type=int, default=10)
     parser.add_argument("--same-seed", action="store_true", default=False)
-    parser.add_argument("--gamma", type=float, default=0.95, help="hessian coef")
+    parser.add_argument("--gamma", type=float, default=1, help="hessian coef")
     parser.add_argument("--beta", type=float, default=0.9, help="momentum coef")
 
     args = parser.parse_args()
@@ -132,8 +132,9 @@ if __name__ == "__main__":
         local_update_steps=args.local_update,
         **kwargs,
     )
+    filename = f"{args.method}_{args.dataset}_{args.lr}_{args.participation}_{args.gamma}.log"
     logging.basicConfig(
-        filename=f"{args.method}_{args.dataset}_{args.lr}_{args.participation}_{args.local_update}.log",
+        filename=filename,
         level=logging.DEBUG,
         format="%(asctime)s, %(message)s",
     )
@@ -193,3 +194,6 @@ if __name__ == "__main__":
             if args.eval_iterations != 0 and (ite + 1) % args.eval_iterations == 0:
                 eval_loss, eval_accuracy = server.eval_model(test_loader, ite)
                 logging.info("%d, %s, %f, %f", ite, "eval", eval_loss, eval_accuracy)
+
+        if args.method == "fedhazo":
+            np.save(filename.replace(".log", ".npz"), server.global_hessian)
