@@ -49,7 +49,8 @@ def prepare_dataloaders(
         )
     elif dataset_name == "cifar10":
         transform_train = transforms.Compose(
-            [
+            [   
+            # transforms.Resize(224), 
                 transforms.RandomCrop(32, padding=4),
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),

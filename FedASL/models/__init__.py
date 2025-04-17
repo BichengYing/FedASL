@@ -5,16 +5,16 @@ from .lenet import LeNet
 from .lstm import CharLSTM
 from .resnet import (
     # imagenet
-    ResNet18,
-    ResNet34,
-    ResNet50,
-    ResNet101,
-    ResNet152,
-    # cifar10
-    Resnet20,
-    Resnet32,
-    Resnet44,
-    Resnet56,
-    Resnet110,
-    Resnet1202,
+    # ResNet18,
+    # ResNet34,
+    # ResNet50,
+    # ResNet101,
+    # ResNet152,
+    # # cifar10
+    ResNet20,
+    ResNet32,
+    # ResNet44,
+    # ResNet56,
+    # ResNet110,
+    # ResNet1202,
 )

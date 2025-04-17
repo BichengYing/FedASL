@@ -17,6 +17,7 @@ client_class_map = {
     "fedzo": fl_client.FedZOClient,
     "scaffold": fl_client.ScaffoldClient,
     "fedau": fl_client.FedAUClient,
+    "fedga": fl_client.FedGAClient,
 }
 server_class_map = {
     "fedavg": fl_server.FedAvgServer,
@@ -25,6 +26,7 @@ server_class_map = {
     "fedzo": fl_server.FedZOServer,
     "scaffold": fl_server.ScaffoldServer,
     "fedau": fl_server.FedAUServer,
+    "fedga": fl_server.FedGAServer,
 }
 
 
@@ -56,12 +58,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="FedASL trainning")
     parser.add_argument("--train-batch-size", type=int, default=128)
     parser.add_argument("--test-batch-size", type=int, default=256)
-    parser.add_argument("--lr", type=float, default=5e-3, help="Learning rate")
-    parser.add_argument("--iterations", type=int, default=1e4, help="Number of iterations")
-    parser.add_argument("--num-clients", type=int, default=100)
-    parser.add_argument("--num-sample-clients", type=int, default=10)
+    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
+    parser.add_argument("--iterations", type=int, default=10000, help="Number of iterations")
+    parser.add_argument("--num-clients", type=int, default=50)
+    parser.add_argument("--num-sample-clients", type=int, default=5)
     parser.add_argument("--local-update", type=int, default=3)
-    parser.add_argument("--dataset", type=str, default="mnist", help="[mnist, fashion, cifar10]")
+    parser.add_argument("--dataset", type=str, default="cifar100", help="[mnist, fashion, cifar10, cifar100]")
     parser.add_argument("--seed", type=int, default=66, help="random seed")
     parser.add_argument("--dtype", type=str, default="float32", help="random seed")
     parser.add_argument("--eval-iterations", type=int, default=25)
@@ -69,12 +71,12 @@ if __name__ == "__main__":
         "--method",
         type=str,
         default="fedavg",
-        help="[fedasl, fedavg, fedgproj, fedzo, scaffold, fedau]",
+        help="[fedasl, fedavg, fedgproj, fedzo, scaffold, fedau, fedag]",
     )
     parser.add_argument("--iid", action="store_true", default=False)
-    parser.add_argument("--dirichlet-alpha", type=float, default=0.1)
+    parser.add_argument("--dirichlet-alpha", type=float, default=1)
     parser.add_argument(
-        "--participation", type=str, default="bern", help=["bern", "markov", "uniform"]
+        "--participation", type=str, default="markov", help=["bern", "markov", "uniform"]
     )
 
     # Per method specified args
@@ -88,7 +90,7 @@ if __name__ == "__main__":
     server_device, client_devices = data_util.auto_select_devices(args.num_clients)
     if args.iid:  # IID
         train_loaders, test_loader = data_util.prepare_dataloaders(
-            args.dataset, args.num_clients, args.train_batch_size, args.test_batch_size, args.seed
+            args.dataset, args.num_clients, args.train_batch_size, args.test_batch_size, args.seed, 
         )
     else:  # Non-IID
         train_loaders, test_loader = data_util.prepare_dataloaders(
@@ -98,6 +100,7 @@ if __name__ == "__main__":
             args.test_batch_size,
             args.seed,
             args.dirichlet_alpha,
+            # shuffle=True, 
         )
     client_models, server_model = model_util.prepare_models(
         args.dataset, args.num_clients, client_devices, server_device, args.dtype
@@ -160,6 +163,8 @@ if __name__ == "__main__":
                 sampling_prob = np.ones(args.num_clients) / args.num_clients
             else:
                 raise ValueError(f"Unknown {args.participation=}")
+            if ite == 3000:
+                args.lr *= 0.8
             step_loss, step_accuracy = server.train_one_step(
                 args.lr, sampling_prob, args.participation
             )

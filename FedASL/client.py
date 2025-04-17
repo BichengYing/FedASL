@@ -385,3 +385,57 @@ class ScaffoldClient(FedClientBase):
 
     def push_step(self) -> tuple[torch.Tensor, torch.Tensor]:
         return self.delta_model, self.delta_c
+
+
+class FedGAClient(FedClientBase):
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        dataloader: DataLoader,
+        criterion: Any,
+        accuracy_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+        device: torch.device | str = "cpu",
+    ):
+        super().__init__(
+            model=model,
+            dataloader=dataloader,
+            criterion=criterion,
+            accuracy_func=accuracy_func,
+            device=device,
+        )
+        self.G = torch.zeros_like(util.get_flatten_model_param(self.model)).to(device)
+        self.e = torch.zeros_like(util.get_flatten_model_param(self.model)).to(device)
+        self.p = torch.zeros_like(util.get_flatten_model_param(self.model)).to(device)
+        self.f = 1000
+        self.w = None
+
+    def local_update(self, lr: float, local_update_steps: int) -> tuple[float, float]:
+        self.model.train()
+        delta = - util.get_flatten_model_param(self.model)
+        train_loss = util.Metric("Client train loss")
+        train_accuracy = util.Metric("Client train accuracy")
+        for k in range(local_update_steps):
+            util.set_all_grad_zero(self.model)
+            batch_inputs, labels = self.get_next_input_labels()
+            pred = self.model(batch_inputs)
+            loss = self.criterion(pred, labels)
+            loss.backward()
+            with torch.no_grad():  # manually update model
+                for param in self.model.parameters():
+                    if param.requires_grad and param.grad is not None:
+                        param.data.add_(param.grad, alpha=-lr)
+        delta += util.get_flatten_model_param(self.model)
+        train_loss.update(loss.detach().item())
+        train_accuracy.update(self.accuracy_func(pred, labels).detach().item())
+        
+        self.p = delta + self.e
+        self.w = self.G.T @ self.p/self.f
+        self.e = self.p - self.G @ self.w
+        return train_loss.avg, train_accuracy.avg
+
+    # Send w to the server
+    def push_step(self) -> torch.Tensor:
+        return self.w
+    
+    def pull_G(self, G: torch.Tensor) -> torch.Tensor:
+        self.G = G

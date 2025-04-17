@@ -41,7 +41,7 @@ class FedServerBase:
             list_index = [i for i, value in enumerate(prob) if value == 1]
         elif participation == "uniform":
             list_index = np.random.choice(
-                np.arange(len(self.clients)), replace=True, size=self.num_sample_clients, p=prob
+                np.arange(len(self.clients)), replace=False, size=self.num_sample_clients, p=prob
             )
         selected_clients = {clients_list[i] for i in list_index}
         return selected_clients
@@ -151,7 +151,6 @@ class FedAvgServer(FedServerBase):
         for client in sampled_clients:
             client.pull_model(self.server_model)
             client_loss, client_accuracy = client.local_update(lr, self.local_update_steps)
-
             step_train_loss.update(client_loss)
             step_train_accuracy.update(client_accuracy)
 
@@ -371,3 +370,56 @@ class ScaffoldServer(FedServerBase):
         util.set_flatten_model_back(self.server_model, server_param)
 
         return step_train_loss.avg, step_train_accuracy.avg
+
+
+class FedGAServer(FedServerBase):
+    def __init__(
+        self,
+        clients: Sequence[fl_client.FedGAClient],
+        device: torch.device,
+        server_model: torch.nn.Module,
+        server_criterion: Any,
+        server_accuracy_func: Callable,
+        num_sample_clients: int = 10,
+        local_update_steps: int = 10,
+    ) -> None:
+        super().__init__(
+            clients=clients,
+            device=device,
+            server_model=server_model,
+            server_criterion=server_criterion,
+            server_accuracy_func=server_accuracy_func,
+            num_sample_clients=num_sample_clients,
+            local_update_steps=local_update_steps,
+        )
+        self.G = generate_G(util.get_flatten_model_param(self.server_model).size(0)).to(device)
+
+    def train_one_step(
+        self, lr: float, sampling_prob: Sequence[float], participation: str
+    ) -> tuple[float, float]:
+        sampled_clients: list[int] = self.get_sampled_client_index(sampling_prob, participation)
+        if not sampled_clients:
+            return np.nan, np.nan
+        step_train_loss = util.Metric("train_loss")
+        step_train_accuracy = util.Metric("train_loss")
+        for client in sampled_clients:
+            client.pull_model(self.server_model)
+            client.pull_G(self.G)
+            client_loss, client_accuracy = client.local_update(lr, self.local_update_steps)
+            step_train_loss.update(client_loss)
+            step_train_accuracy.update(client_accuracy)
+        # Update the server model
+        avg_delta = 0
+        for client in sampled_clients:
+            avg_delta += self.G @ client.push_step()
+        avg_delta.div_(len(sampled_clients))
+        with torch.no_grad():
+            for param, delta in zip(self.server_model.parameters(), avg_delta):
+                param -= lr * delta
+        return step_train_loss.avg, step_train_accuracy.avg
+    
+
+# Generate a dxf matrix where each entry is sampled from N(0, 1)
+def generate_G(d:int, f:int=1000) -> torch.Tensor:
+    G = torch.randn(d, f)
+    return G
