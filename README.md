@@ -11,7 +11,7 @@ python main.py --seed=66 --iterations=10000 --dataset=cifar10 --method=fedasl --
 
 ```
 @inproceedings{
-  anonymous2025exact,
+  Ying2025exact,
   title={Exact and Linear Convergence for Federated Learning under Arbitrary Client Participation is Attainable},
   author={Bicheng Ying and Zhe Li and Haibo Yang},
   booktitle={The Thirty-ninth Annual Conference on Neural Information Processing Systems},
