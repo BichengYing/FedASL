@@ -22,6 +22,9 @@ An example command for running experiment are
 ```bash
 python main.py --seed=66 --iterations=10000 --dataset=cifar10 --method=fedasl --lr=2e-3 --dirichlet-alpha=0.05 --num-clients=32 --participation=bern;
 ```
+
+The experiment figures in the paper are generated through `focus.ipynb` and `sg_focus.ipynb` under figures folder.
+
 ## Citation
 
 ```
