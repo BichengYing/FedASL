@@ -353,12 +353,32 @@ class FedHessianAwareZOServer(FedServerBase):
         )
 
     def train_one_step(
-        self, lr: float, sampling_prob: Sequence[float], participation: str
+        self,
+        lr: float,
+        sampling_prob: Sequence[float],
+        participation: str,
+        use_fo_step: bool = False,
     ) -> tuple[float, float]:
         sampled_clients: list[int] = self.get_sampled_client_index(sampling_prob, participation)
 
         step_train_loss = util.Metric("train_loss")
         step_train_accuracy = util.Metric("train_loss")
+        if use_fo_step:
+            for i, client in enumerate(sampled_clients):
+                client.pull_model(self.server_model)
+                client_loss, client_accuracy = client.local_update_fo(lr, self.local_update_steps)
+
+                step_train_loss.update(client_loss)
+                step_train_accuracy.update(client_accuracy)
+            # Update the server model
+            avg_model = 0
+            for client in sampled_clients:
+                avg_model += client.push_step()[0]  # it returns both model and one_step_update.
+            avg_model.div_(len(sampled_clients))
+            util.set_flatten_model_back(self.server_model, avg_model)
+
+            return step_train_loss.avg, step_train_accuracy.avg
+
         for i, client in enumerate(sampled_clients):
             seeds = np.random.randint(100000, size=self.num_pert)
             if not self.same_seed:
