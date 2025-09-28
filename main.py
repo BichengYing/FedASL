@@ -143,9 +143,11 @@ if __name__ == "__main__":
     with tqdm(total=args.iterations, desc="Training:") as t:
         np.random.seed(args.seed)
         if args.participation == "bern":
-            client_probabilities_low = np.random.uniform(0.1, 0.3, size=int(args.num_clients * 0.9))
+            num_client_low = int(args.num_clients * 0.9)
+            num_client_high = args.num_clients - num_client_low
+            client_probabilities_low = np.random.uniform(0.1, 0.3, size=num_client_low)
             client_probabilities_high = np.random.uniform(
-                0.1, 0.9, size=int(args.num_clients * 0.1)
+                0.1, 0.9, size=num_client_high
             )
             client_probabilities = np.concatenate(
                 [client_probabilities_low, client_probabilities_high]
