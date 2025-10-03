@@ -214,6 +214,51 @@ class FedAUClient(FedClientBase):
             pass
 
 
+class MIFAClient(FedClientBase):
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        dataloader: DataLoader,
+        criterion: Any,
+        accuracy_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+        device: torch.device | str = "cpu",
+    ):
+        super().__init__(
+            model=model,
+            dataloader=dataloader,
+            criterion=criterion,
+            accuracy_func=accuracy_func,
+            device=device,
+        )
+
+    def local_update(self, lr: float, local_update_steps: int) -> tuple[float, float]:
+        # Assume the model is already pulled from the server
+        self.original_flatten_model = util.get_flatten_model_param(self.model)
+
+        self.model.train()
+        train_loss = util.Metric("Client train loss")
+        train_accuracy = util.Metric("Client train accuracy")
+        for k in range(local_update_steps):
+            util.set_all_grad_zero(self.model)
+            batch_inputs, labels = self.get_next_input_labels()
+            pred = self.model(batch_inputs)
+            loss = self.criterion(pred, labels)
+            loss.backward()
+
+            with torch.no_grad():  # manually update model
+                for p in self.model.parameters():
+                    if p.requires_grad and p.grad is not None:
+                        p.data.add_(p.grad, alpha=-lr)
+
+        train_loss.update(loss.detach().item())
+        train_accuracy.update(self.accuracy_func(pred, labels).detach().item())
+
+        return train_loss.avg, train_accuracy.avg
+
+    def push_step(self) -> torch.Tensor:
+        return self.original_flatten_model - util.get_flatten_model_param(self.model)
+
+
 class FedGaussianProjClient(FedClientBase):
     def __init__(
         self,

@@ -18,6 +18,7 @@ client_class_map = {
     "scaffold": fl_client.ScaffoldClient,
     "fedau": fl_client.FedAUClient,
     "fedhazo": fl_client.FedHessianAwareZOClient,
+    "mifa": fl_client.MIFAClient,
 }
 server_class_map = {
     "fedavg": fl_server.FedAvgServer,
@@ -27,6 +28,7 @@ server_class_map = {
     "scaffold": fl_server.ScaffoldServer,
     "fedau": fl_server.FedAUServer,
     "fedhazo": fl_server.FedHessianAwareZOServer,
+    "mifa": fl_server.MIFAServer,
 }
 
 
@@ -146,9 +148,7 @@ if __name__ == "__main__":
             num_client_low = int(args.num_clients * 0.9)
             num_client_high = args.num_clients - num_client_low
             client_probabilities_low = np.random.uniform(0.1, 0.3, size=num_client_low)
-            client_probabilities_high = np.random.uniform(
-                0.1, 0.9, size=num_client_high
-            )
+            client_probabilities_high = np.random.uniform(0.1, 0.9, size=num_client_high)
             client_probabilities = np.concatenate(
                 [client_probabilities_low, client_probabilities_high]
             )

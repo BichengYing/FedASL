@@ -16,7 +16,7 @@ def auto_select_devices(
     if not no_cuda and torch.cuda.is_available():
         num_devices = torch.cuda.device_count()
         return torch.device("cuda:0"), [
-            torch.device(f"cuda:{(i+1) % num_devices}") for i in range(num_clients)
+            torch.device(f"cuda:{(i + 1) % num_devices}") for i in range(num_clients)
         ]
 
     if not no_mps and torch.backends.mps.is_available():
@@ -158,7 +158,7 @@ def get_dirichlet_split_indexes(
     unique_labels = list(label_indices_dict.keys())
     n_labels = len(unique_labels)
     if not sorted(unique_labels) == list(range(n_labels)):
-        raise ValueError("Please re-map the labels of dataset into " "0 to num_classes-1 integers.")
+        raise ValueError("Please re-map the labels of dataset into 0 to num_classes-1 integers.")
 
     data_class_prob = np.array([len(label_indices_dict[i]) for i in range(n_labels)]) / n_data
     # This is a matrix with dimension "num_split * num_classes"
